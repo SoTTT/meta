@@ -2,7 +2,7 @@
 #define META_OPERATION_HPP
 
 #include <algorithm>
-
+#include <type_traits>
 
 namespace meta_operation {
     /**
@@ -16,7 +16,7 @@ namespace meta_operation {
          */
         template<typename T>
         struct remove_cv_ref {
-            using type = std::remove_cv_t<std::remove_reference_t<T>>;
+            using type = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
         };
 
         template<typename T>
@@ -43,7 +43,7 @@ namespace meta_operation {
                     typename T::iterator,
                     decltype(std::declval<T>().begin()),
                     decltype(std::declval<T>().end())
-                >> : std::true_type {
+                > > : std::true_type {
         };
 
         /**
@@ -55,7 +55,7 @@ namespace meta_operation {
         };
 
         template<template <typename...> class C, typename... Args>
-        struct is_template_instance<C<Args...>> : std::true_type {
+        struct is_template_instance<C<Args...> > : std::true_type {
         };
 
         /**
@@ -64,8 +64,8 @@ namespace meta_operation {
          */
         template<typename T>
         struct is_container_and_element_type_is_not_container :
-                std::bool_constant<is_container<T>::value
-                                   && !is_container<typename element_type<T>::type>::value> {
+                std::integral_constant<bool, is_container<T>::value
+                                             && !is_container<typename element_type<T>::type>::value> {
         };
 
         /**
@@ -86,7 +86,7 @@ namespace meta_operation {
         };
 
         template<typename Container>
-        struct iterator_traits_adaptor<std::back_insert_iterator<Container>> :
+        struct iterator_traits_adaptor<std::back_insert_iterator<Container> > :
                 std::iterator_traits<typename Container::iterator> {
         };
 
@@ -95,13 +95,13 @@ namespace meta_operation {
             using value_type = typename iterator_traits_adaptor<Iterator>::value_type;
             using iterator = Iterator;
 
-            Iterator&_begin;
-            Iterator&_end;
+            Iterator &_begin;
+            Iterator &_end;
 
             [[nodiscard]] Iterator begin() const { return _begin; }
             [[nodiscard]] Iterator end() const { return _end; }
 
-            container_view(Iterator&begin, Iterator&end) : _begin(begin), _end(end) {
+            container_view(Iterator &begin, Iterator &end) : _begin(begin), _end(end) {
             }
         };
     }
@@ -132,14 +132,14 @@ namespace meta_operation {
 
 
         template<typename Container, typename Transformer>
-        void flat_foreach(Container&container, Transformer&&transformer, std::true_type) {
+        void flat_foreach(Container &container, Transformer &&transformer, std::true_type) {
             std::forward<Transformer>(transformer)(container);
         }
 
 
         template<typename Container, typename Transformer>
-        void flat_foreach(Container&container, Transformer&&transformer, std::false_type) {
-            for (auto&item: container) {
+        void flat_foreach(Container &container, Transformer &&transformer, std::false_type) {
+            for (auto &item: container) {
                 impl::flat_foreach(item, std::forward<Transformer>(transformer),
                                    helper::is_container_and_element_type_is_not_container<typename helper::remove_cv_ref
                                        <Container>::type>{}
@@ -148,7 +148,7 @@ namespace meta_operation {
         }
 
         template<class Container, typename OutputIt, typename Transformer>
-        void flat_transform(Container&container, OutputIt destIt, Transformer&&transformer,
+        void flat_transform(Container &container, OutputIt destIt, Transformer &&transformer,
                             std::true_type) {
             std::transform(std::begin(container),
                            std::end(container),
@@ -157,9 +157,9 @@ namespace meta_operation {
         }
 
         template<class Container, typename OutputIt, typename Transformer>
-        void flat_transform(Container&container, OutputIt destIt, Transformer&&transformer,
+        void flat_transform(Container &container, OutputIt destIt, Transformer &&transformer,
                             std::false_type) {
-            for (auto&innerContainer: container) {
+            for (auto &innerContainer: container) {
                 typename helper::remove_cv_ref<decltype(innerContainer)>::type inner(innerContainer.size());
                 impl::flat_transform(innerContainer,
                                      inner.begin(),
@@ -198,7 +198,7 @@ namespace meta_operation {
      * @memberof type 模板实例化类型的第Ns个模板参数
      */
     template<template<class...> class T, int Ns, typename... E>
-    struct get_Ns_arg_from_template<Ns, T<E...>> {
+    struct get_Ns_arg_from_template<Ns, T<E...> > {
         using type = typename get_Ns_arg<Ns, E...>::type;
     };
 
@@ -211,7 +211,7 @@ namespace meta_operation {
     template<typename TMP, typename... N>
     struct replace_type {
         using type = typename impl::match_template_arguments_helper
-        <TMP, impl::wrapper_type_list<N...>>::template type<N...>;
+        <TMP, impl::wrapper_type_list<N...> >::template type<N...>;
     };
 
     template<typename T>
@@ -228,12 +228,12 @@ namespace meta_operation {
     };
 
     template<template<class...> class TMP, typename... TemplateArgs>
-    struct rank<TMP<TemplateArgs...>> {
+    struct rank<TMP<TemplateArgs...> > {
         static constexpr int n = rank<typename get_first_arg<TemplateArgs...>::type>::n + 1;
     };
 
     template<typename T>
-    constexpr int get_rank(T&&) {
+    constexpr int get_rank(T &&) {
         return rank<typename std::remove_reference<typename std::remove_cv<T>::type>::type>::n;
     }
 
@@ -246,7 +246,7 @@ namespace meta_operation {
      * @param transformer 要应用的容器上的可调用对象或函数
      */
     template<typename Container, typename Transformer>
-    void flat_foreach(Container&container, Transformer&&transformer) {
+    void flat_foreach(Container &container, Transformer &&transformer) {
         impl::flat_foreach(container,
                            std::forward<Transformer>(transformer),
                            helper::is_container_and_element_type_is_not_container<
@@ -255,7 +255,7 @@ namespace meta_operation {
     }
 
     template<typename Iterator, typename Transformer>
-    void flat_foreach(Iterator begin, Iterator end, Transformer&&transformer) {
+    void flat_foreach(Iterator begin, Iterator end, Transformer &&transformer) {
         helper::container_view<Iterator> view{begin, end};
         flat_foreach(view, std::forward<Transformer>(transformer));
     }
@@ -273,7 +273,8 @@ namespace meta_operation {
     };
 
     template<typename T, template <typename...> class Container>
-    struct replace_other_container_type_with<T, Container, std::enable_if_t<helper::is_container<T>::value>> {
+    struct replace_other_container_type_with<T, Container, typename std::enable_if<helper::is_container<
+                T>::value>::type> {
         using type = Container<typename replace_other_container_type_with<typename T::value_type, Container>::type>;
     };
 
@@ -289,7 +290,7 @@ namespace meta_operation {
      * @return 将一元操作作用于待变换容器的各个元素的结果按照待变换容器的维度和次序构成的容器
      */
     template<class Container, typename Transformer>
-    auto flat_transform(Container&container, Transformer&&transformer) {
+    auto flat_transform(Container &container, Transformer &&transformer) {
         typename helper::remove_cv_ref<Container>::type dest(container.size());
         impl::flat_transform(container,
                              dest.begin(),
@@ -315,10 +316,10 @@ namespace meta_operation {
      * 配器则暂未提供类似的支持；
      */
     template<typename InputIt, typename OutputIt, typename Transformer>
-    void flat_transform(InputIt begin, InputIt end, OutputIt dest, Transformer&&transformer) {
+    void flat_transform(InputIt begin, InputIt end, OutputIt dest, Transformer &&transformer) {
         helper::container_view<InputIt> view{begin, end};
         impl::flat_transform(view, dest, std::forward<Transformer>(transformer),
-                             helper::is_container_and_element_type_is_not_container<helper::container_view<OutputIt>>
+                             helper::is_container_and_element_type_is_not_container<helper::container_view<OutputIt> >
                              {});
     }
 }
