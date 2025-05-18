@@ -290,7 +290,7 @@ namespace meta_operation {
      * @return 将一元操作作用于待变换容器的各个元素的结果按照待变换容器的维度和次序构成的容器
      */
     template<class Container, typename Transformer>
-    auto flat_transform(Container &container, Transformer &&transformer) {
+    auto flat_transform(Container &container, Transformer &&transformer) -> typename helper::remove_cv_ref<Container>::type {
         typename helper::remove_cv_ref<Container>::type dest(container.size());
         impl::flat_transform(container,
                              dest.begin(),
@@ -314,6 +314,10 @@ namespace meta_operation {
      * meta_operation::flat_transform(c.begin(), c.end(), std::back_inserter(dest), transformer) 这样的代码实际上无法
      * 通过编译，为了使用法尽可能与标准库算法保持一致，实现对std::back_insert_iterator进行了定制，使上述代码可以正常通过编译，对于其它迭代器适
      * 配器则暂未提供类似的支持；
+     * @example
+     * meta_operation::flat_transform(arr.begin(), arr.end(), dest.begin(), [](const double a) {
+    *  return 1 + a;
+    *  });
      */
     template<typename InputIt, typename OutputIt, typename Transformer>
     void flat_transform(InputIt begin, InputIt end, OutputIt dest, Transformer &&transformer) {
