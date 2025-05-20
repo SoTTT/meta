@@ -170,6 +170,21 @@ namespace meta_operation {
                 *destIt++ = std::move(inner);
             }
         }
+
+        template<class Container, typename DestContainer, typename Transformer>
+        void flat_foreach_nest(Container &container, DestContainer &dest, Transformer &&transformer, std::true_type) {
+            std::transform(std::begin(container), std::end(container), std::begin(dest),
+                           std::forward<Transformer>(transformer));
+        }
+
+        template<class Container, typename DestContainer, typename Transformer>
+        void flat_foreach_nest(Container &container, DestContainer &dest, Transformer &&transformer, std::false_type) {
+            for (int i = 0; i < container.size(); i++) {
+                flat_foreach_nest(container[i], dest[i], std::forward<Transformer>(transformer),
+                                  helper::is_container_and_element_type_is_not_container<typename helper::remove_cv_ref<
+                                      decltype(container[i])>::type>{});
+            }
+        }
     }
 
     template<int Ns, typename... Other>
@@ -290,7 +305,8 @@ namespace meta_operation {
      * @return 将一元操作作用于待变换容器的各个元素的结果按照待变换容器的维度和次序构成的容器
      */
     template<class Container, typename Transformer>
-    auto flat_transform(Container &container, Transformer &&transformer) -> typename helper::remove_cv_ref<Container>::type {
+    auto flat_transform(Container &container,
+                        Transformer &&transformer) -> typename helper::remove_cv_ref<Container>::type {
         typename helper::remove_cv_ref<Container>::type dest(container.size());
         impl::flat_transform(container,
                              dest.begin(),
@@ -306,18 +322,19 @@ namespace meta_operation {
      * @param end 一个迭代器，用于指出待变换范围的尾部
      * @param dest 一个输出迭代器，用于指出变换的目标范围
      * @param transformer 用于执行变换的一元操作
+     * @pre
+     * 若使用插入迭代器适配器时，应保证最外层容器的长度为0，对于其他输入迭代器，应保证最外层容器的长度符合源范围长度，对于内层容器，
+     * 最好的情况下应保持其为空，若内层容器非空不会引发错误，但会导致额外的内存释放和元素析构
      * @note
      * 在使用std::transform时，经常使用std::back_insert_iterator以省去调整容器大小的操作。
      * 在flat_transform中，实现需要根据OutputIt的类型特征判断是否应该终止递归模板展开；但是，受标准库实现的限制，在C++20前，对于一个容器类型
      * Container，任意的迭代器适配器IteratorAdaptor<Container>都无法通过std::iterator_traits正确地获取其类型特征，对于元素类型，
      * std::iterator_traits<IteratorAdaptor<Container>>::value_type始终为void，这导致
-     * meta_operation::flat_transform(c.begin(), c.end(), std::back_inserter(dest), transformer) 这样的代码实际上无法
-     * 通过编译，为了使用法尽可能与标准库算法保持一致，实现对std::back_insert_iterator进行了定制，使上述代码可以正常通过编译，对于其它迭代器适
-     * 配器则暂未提供类似的支持；
-     * @example
-     * meta_operation::flat_transform(arr.begin(), arr.end(), dest.begin(), [](const double a) {
-    *  return 1 + a;
-    *  });
+     * @code
+     * meta_operation::flat_transform(c.begin(), c.end(), std::back_inserter(dest), transformer);
+     * @endcode
+     * 这样的代码实际上无法通过编译，为了使用法尽可能与标准库算法保持一致，实现对std::back_insert_iterator进行了定制，
+     * 使上述代码可以正常通过编译，对于其它迭代器适配器则暂未提供类似的支持；
      */
     template<typename InputIt, typename OutputIt, typename Transformer>
     void flat_transform(InputIt begin, InputIt end, OutputIt dest, Transformer &&transformer) {
@@ -325,6 +342,13 @@ namespace meta_operation {
         impl::flat_transform(view, dest, std::forward<Transformer>(transformer),
                              helper::is_container_and_element_type_is_not_container<helper::container_view<OutputIt> >
                              {});
+    }
+
+    template<typename Container, typename DestContainer, typename Transformer>
+    void flat_transform(Container &container, DestContainer &dest, Transformer &&transformer) {
+        impl::flat_foreach_nest(container, dest, std::forward<Transformer>(transformer),
+                             helper::is_container_and_element_type_is_not_container<typename helper::remove_cv_ref<
+                                 Container>::type>{});
     }
 }
 

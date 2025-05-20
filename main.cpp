@@ -89,6 +89,24 @@ void BM_std_transform(benchmark::State &state) {
 
 BENCHMARK(BM_std_transform);
 
+void BM_flat_transform_with_pre_resize(benchmark::State &state) {
+    using namespace dim;
+    auto arr = random_generate_vector();
+
+    for (auto const &_: state) {
+        // state.PauseTiming();
+        std::vector<std::vector<std::vector<double> > > dest(
+            dim1, std::vector<std::vector<double> >(dim2, std::vector<double>(dim3)));
+        // state.ResumeTiming();
+
+        meta_operation::flat_transform(arr, dest, [](const double a) {
+            return 1 + a;
+        });
+    }
+}
+
+BENCHMARK(BM_flat_transform_with_pre_resize);
+
 void BM_flat_transform_with_back_insert_iterator(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector();
