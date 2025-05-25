@@ -160,9 +160,10 @@ namespace meta_operation {
         void flat_transform(Container &container, OutputIt destIt, Transformer &&transformer,
                             std::false_type) {
             for (auto &innerContainer: container) {
-                typename helper::remove_cv_ref<decltype(innerContainer)>::type inner(innerContainer.size());
+                typename helper::remove_cv_ref<decltype(innerContainer)>::type inner;
+                inner.reserve(innerContainer.size());
                 impl::flat_transform(innerContainer,
-                                     inner.begin(),
+                                     std::back_inserter(inner),
                                      std::forward<Transformer>(transformer),
                                      helper::is_container_and_element_type_is_not_container<typename
                                          helper::remove_cv_ref<decltype(innerContainer
@@ -344,11 +345,21 @@ namespace meta_operation {
                              {});
     }
 
+    template<typename InputIt, typename DestContainer, typename Transformer>
+    void flat_transform(InputIt begin, InputIt end, std::back_insert_iterator<DestContainer> dest,
+                        Transformer &&transformer) {
+        helper::container_view<InputIt> view{begin, end};
+        impl::flat_transform(view, dest, std::forward<Transformer>(transformer),
+                             helper::is_container_and_element_type_is_not_container<helper::container_view<
+                                 std::back_insert_iterator<DestContainer> > >
+                             {});
+    }
+
     template<typename Container, typename DestContainer, typename Transformer>
     void flat_transform(Container &container, DestContainer &dest, Transformer &&transformer) {
         impl::flat_foreach_nest(container, dest, std::forward<Transformer>(transformer),
-                             helper::is_container_and_element_type_is_not_container<typename helper::remove_cv_ref<
-                                 Container>::type>{});
+                                helper::is_container_and_element_type_is_not_container<typename helper::remove_cv_ref<
+                                    Container>::type>{});
     }
 }
 
