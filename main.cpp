@@ -7,10 +7,14 @@
 #include <benchmark/benchmark.h>
 #include <random>
 
+std::random_device rd;
+std::mt19937 gen(rd());
+std::uniform_int_distribution<> dis(100, 200);
+
 namespace dim {
-    constexpr size_t dim1 = 400;
-    constexpr size_t dim2 = 400;
-    constexpr size_t dim3 = 400;
+    const size_t dim1 = dis(gen);
+    const size_t dim2 = dis(gen);
+    const size_t dim3 = dis(gen);
 }
 
 template<typename ValueType>

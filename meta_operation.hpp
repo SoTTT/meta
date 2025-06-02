@@ -352,6 +352,21 @@ namespace meta_operation {
      * @param end 一个迭代器，用于指出待变换范围的尾部
      * @param dest 一个输出迭代器，用于指出变换的目标范围
      * @param transformer 用于执行变换的一元操作
+     */
+    template<typename InputIt, typename OutputIt, typename Transformer>
+    void flat_transform(InputIt begin, InputIt end, OutputIt dest, Transformer&&transformer) {
+        helper::container_view<InputIt> view{begin, end};
+        impl::flat_transform(view, dest, std::forward<Transformer>(transformer),
+                             helper::is_container_and_element_type_is_not_container<helper::container_view<OutputIt>>
+                             {});
+    }
+
+    /**
+     * @brief 遍历由一组迭代器对指出的范围，将容器中的每一个元素应用于一元操作transformer，并置于由dest作为起始位置的范围的对应位置，在遍历时将有多个维度的容器视为一维的
+     * @param begin 一个迭代器，用于指出待变换范围的开始
+     * @param end 一个迭代器，用于指出待变换范围的尾部
+     * @param dest 一个尾部插入，用于指出变换的目标范围
+     * @param transformer 用于执行变换的一元操作
      * @pre
      * 若使用插入迭代器适配器时，应保证最外层容器的长度为0，对于其他输入迭代器，应保证最外层容器的长度符合源范围长度，对于内层容器，
      * 最好的情况下应保持其为空，若内层容器非空不会引发错误，但会导致额外的内存释放和元素析构
@@ -363,17 +378,9 @@ namespace meta_operation {
      * @code
      * meta_operation::flat_transform(c.begin(), c.end(), std::back_inserter(dest), transformer);
      * @endcode
-     * 这样的代码实际上无法通过编译，为了使用法尽可能与标准库算法保持一致，实现对std::back_insert_iterator进行了定制，
+     * 这样的代码实际上无法通过编译，为了使用法尽可能与标准库算法保持一致，该实现为std::back_insert_iterator提供了支持，
      * 使上述代码可以正常通过编译，对于其它迭代器适配器则暂未提供类似的支持；
      */
-    template<typename InputIt, typename OutputIt, typename Transformer>
-    void flat_transform(InputIt begin, InputIt end, OutputIt dest, Transformer&&transformer) {
-        helper::container_view<InputIt> view{begin, end};
-        impl::flat_transform(view, dest, std::forward<Transformer>(transformer),
-                             helper::is_container_and_element_type_is_not_container<helper::container_view<OutputIt>>
-                             {});
-    }
-
     template<typename InputIt, typename DestContainer, typename Transformer>
     void flat_transform(InputIt&begin, InputIt&end, std::back_insert_iterator<DestContainer>&dest,
                         Transformer&transformer) {
@@ -388,6 +395,13 @@ namespace meta_operation {
                              {});
     }
 
+    /**
+     * @brief 遍历由一组迭代器对指出的范围，将容器中的每一个元素应用于一元操作transformer，并置于由dest作为起始位置的范围的对应位置，在遍历时将有多个维度的容器视为一维的
+     * @param container 待变换的容器
+     * @param dest 一个输出迭代器，用于指出变换的目标范围
+     * @param transformer 用于执行变换的一元操作
+     * @pre 实现要求container和dest的维度和每个维度上的长度是一致的，也就是说，container是一个预先调整长度的向量、矩阵或张量
+     */
     template<typename Container, typename DestContainer, typename Transformer>
     void flat_transform(Container&container, DestContainer&dest, Transformer&&transformer) {
         impl::flat_foreach_nest(container, dest, std::forward<Transformer>(transformer),
