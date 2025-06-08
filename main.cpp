@@ -3,13 +3,14 @@
 #include <vector>
 
 #include "meta_operation.hpp"
+#include "oatpp_helper.hpp"
 
 #include <benchmark/benchmark.h>
 #include <random>
 
 std::random_device rd;
 std::mt19937 gen(rd());
-std::uniform_int_distribution<> dis(100, 200);
+std::uniform_int_distribution<> dis(90, 100);
 
 namespace dim {
     const size_t dim1 = dis(gen);
@@ -18,21 +19,21 @@ namespace dim {
 }
 
 template<typename ValueType>
-std::vector<std::vector<std::vector<ValueType>>> random_generate_vector();
+std::vector<std::vector<std::vector<ValueType> > > random_generate_vector();
 
 template<>
-std::vector<std::vector<std::vector<double>>> random_generate_vector() {
+std::vector<std::vector<std::vector<double> > > random_generate_vector() {
     using namespace dim;
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis(0.0, 1.0);
     std::uniform_int_distribution<> dim_dis(1, 100); // 随机生成1到10的整数
 
-    std::vector<std::vector<std::vector<double>>> arr(
-        dim1, std::vector<std::vector<double>>(dim2, std::vector<double>(dim3)));
-    for (auto&i: arr) {
-        for (auto&j: i) {
-            for (auto&k: j) {
+    std::vector<std::vector<std::vector<double> > > arr(
+        dim1, std::vector<std::vector<double> >(dim2, std::vector<double>(dim3)));
+    for (auto &i: arr) {
+        for (auto &j: i) {
+            for (auto &k: j) {
                 k = dis(gen);
             }
         }
@@ -44,7 +45,7 @@ std::vector<std::vector<std::vector<double>>> random_generate_vector() {
 }
 
 template<>
-std::vector<std::vector<std::vector<std::string>>> random_generate_vector() {
+std::vector<std::vector<std::vector<std::string> > > random_generate_vector() {
     using namespace dim;
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -52,11 +53,11 @@ std::vector<std::vector<std::vector<std::string>>> random_generate_vector() {
     std::uniform_int_distribution<> dim_dis(1, 100); // 随机生成1到10的整数
     std::uniform_int_distribution<> char_dim(1, 127);
 
-    std::vector<std::vector<std::vector<std::string>>> arr(
-        dim1, std::vector<std::vector<std::string>>(dim2, std::vector<std::string>(dim3)));
-    for (auto&i: arr) {
-        for (auto&j: i) {
-            for (auto&k: j) {
+    std::vector<std::vector<std::vector<std::string> > > arr(
+        dim1, std::vector<std::vector<std::string> >(dim2, std::vector<std::string>(dim3)));
+    for (auto &i: arr) {
+        for (auto &j: i) {
+            for (auto &k: j) {
                 k = std::string(dim_dis(gen), char_dim(gen));
             }
         }
@@ -68,40 +69,38 @@ std::vector<std::vector<std::vector<std::string>>> random_generate_vector() {
 }
 
 
-void BM_create_vector_and_resize_double(benchmark::State&state) {
+void BM_create_vector_and_resize_double(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<double>();
 
-    for (auto const&_: state) {
-        std::vector<std::vector<std::vector<double>>> dest(
-            dim1, std::vector<std::vector<double>>(dim2, std::vector<double>(dim3)));
+    for (auto const &_: state) {
+        std::vector<std::vector<std::vector<double> > > dest(
+            dim1, std::vector<std::vector<double> >(dim2, std::vector<double>(dim3)));
         // benchmark::DoNotOptimize(dest);
     }
 }
 
-BENCHMARK(BM_create_vector_and_resize_double);
 
-void BM_create_vector_and_resize_std_string(benchmark::State&state) {
+void BM_create_vector_and_resize_std_string(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<std::string>();
 
-    for (auto const&_: state) {
-        std::vector<std::vector<std::vector<std::string>>> dest(
-            dim1, std::vector<std::vector<std::string>>(dim2, std::vector<std::string>(dim3)));
+    for (auto const &_: state) {
+        std::vector<std::vector<std::vector<std::string> > > dest(
+            dim1, std::vector<std::vector<std::string> >(dim2, std::vector<std::string>(dim3)));
         // benchmark::DoNotOptimize(dest);
     }
 }
 
-BENCHMARK(BM_create_vector_and_resize_std_string);
 
-void BM_flat_transform(benchmark::State&state) {
+void BM_flat_transform(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<double>();
 
-    for (auto const&_: state) {
+    for (auto const &_: state) {
         // state.PauseTiming();
-        std::vector<std::vector<std::vector<double>>> dest(
-            dim1, std::vector<std::vector<double>>(dim2, std::vector<double>(dim3)));
+        std::vector<std::vector<std::vector<double> > > dest(
+            dim1, std::vector<std::vector<double> >(dim2, std::vector<double>(dim3)));
         // state.ResumeTiming();
 
         meta_operation::flat_transform(arr.begin(), arr.end(), dest.begin(), [](const double a) {
@@ -110,16 +109,15 @@ void BM_flat_transform(benchmark::State&state) {
     }
 }
 
-BENCHMARK(BM_flat_transform);
 
-void BM_std_transform_double(benchmark::State&state) {
+void BM_std_transform_double(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<double>();
 
-    for (auto const&_: state) {
+    for (auto const &_: state) {
         // state.PauseTiming();
-        std::vector<std::vector<std::vector<double>>> dest(
-            dim1, std::vector<std::vector<double>>(dim2, std::vector<double>(dim3)));
+        std::vector<std::vector<std::vector<double> > > dest(
+            dim1, std::vector<std::vector<double> >(dim2, std::vector<double>(dim3)));
         // state.ResumeTiming();
 
         for (size_t i = 0; i < dim1; ++i) {
@@ -132,21 +130,20 @@ void BM_std_transform_double(benchmark::State&state) {
     }
 }
 
-BENCHMARK(BM_std_transform_double);
 
-void BM_std_transform_string(benchmark::State&state) {
+void BM_std_transform_string(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<std::string>();
 
-    for (auto const&_: state) {
+    for (auto const &_: state) {
         // state.PauseTiming();
-        std::vector<std::vector<std::vector<std::string>>> dest(
-            dim1, std::vector<std::vector<std::string>>(dim2, std::vector<std::string>(dim3)));
+        std::vector<std::vector<std::vector<std::string> > > dest(
+            dim1, std::vector<std::vector<std::string> >(dim2, std::vector<std::string>(dim3)));
         // state.ResumeTiming();
 
         for (size_t i = 0; i < dim1; ++i) {
             for (size_t j = 0; j < dim2; ++j) {
-                std::transform(arr[i][j].begin(), arr[i][j].end(), dest[i][j].begin(), [](std::string&a) {
+                std::transform(arr[i][j].begin(), arr[i][j].end(), dest[i][j].begin(), [](std::string &a) {
                     std::reverse(a.begin(), a.end());
                     return a;
                 });
@@ -155,16 +152,15 @@ void BM_std_transform_string(benchmark::State&state) {
     }
 }
 
-BENCHMARK(BM_std_transform_string);
 
-void BM_flat_transform_with_pre_resize_double(benchmark::State&state) {
+void BM_flat_transform_with_pre_resize_double(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<double>();
 
-    for (auto const&_: state) {
+    for (auto const &_: state) {
         // state.PauseTiming();
-        std::vector<std::vector<std::vector<double>>> dest(
-            dim1, std::vector<std::vector<double>>(dim2, std::vector<double>(dim3)));
+        std::vector<std::vector<std::vector<double> > > dest(
+            dim1, std::vector<std::vector<double> >(dim2, std::vector<double>(dim3)));
         // state.ResumeTiming();
 
         meta_operation::flat_transform(arr, dest, [](const double a) {
@@ -173,72 +169,68 @@ void BM_flat_transform_with_pre_resize_double(benchmark::State&state) {
     }
 }
 
-BENCHMARK(BM_flat_transform_with_pre_resize_double);
 
-void BM_flat_transform_with_pre_resize_string(benchmark::State&state) {
+void BM_flat_transform_with_pre_resize_string(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<std::string>();
 
-    for (auto const&_: state) {
+    for (auto const &_: state) {
         // state.PauseTiming();
-        std::vector<std::vector<std::vector<std::string>>> dest(
-            dim1, std::vector<std::vector<std::string>>(dim2, std::vector<std::string>(dim3)));
+        std::vector<std::vector<std::vector<std::string> > > dest(
+            dim1, std::vector<std::vector<std::string> >(dim2, std::vector<std::string>(dim3)));
         // state.ResumeTiming();
 
-        meta_operation::flat_transform(arr, dest, [](std::string& a) {
+        meta_operation::flat_transform(arr, dest, [](std::string &a) {
             std::reverse(a.begin(), a.end());
             return a;
         });
     }
 }
 
-BENCHMARK(BM_flat_transform_with_pre_resize_string);
 
-void BM_flat_transform_with_back_insert_iterator(benchmark::State&state) {
+void BM_flat_transform_with_back_insert_iterator(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<double>();
 
-    for (auto const&_: state) {
-        std::vector<std::vector<std::vector<double>>> dest;
+    for (auto const &_: state) {
+        std::vector<std::vector<std::vector<double> > > dest;
         dest.reserve(arr.size());
-        meta_operation::flat_transform(arr.begin(), arr.end(), std::back_inserter(dest), [](const double&a) {
+        meta_operation::flat_transform(arr.begin(), arr.end(), std::back_inserter(dest), [](const double &a) {
             return 1 + a;
         });
     }
 }
 
-BENCHMARK(BM_flat_transform_with_back_insert_iterator);
 
-void BM_flat_transform_with_back_insert_iterator_string(benchmark::State&state) {
+void BM_flat_transform_with_back_insert_iterator_string(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<std::string>();
 
-    for (auto const&_: state) {
-        std::vector<std::vector<std::vector<std::string>>> dest;
+    for (auto const &_: state) {
+        std::vector<std::vector<std::vector<std::string> > > dest;
         dest.reserve(arr.size());
-        meta_operation::flat_transform(arr.begin(), arr.end(), std::back_inserter(dest), [](std::string&a) {
+        meta_operation::flat_transform(arr.begin(), arr.end(), std::back_inserter(dest), [](std::string &a) {
             std::reverse(a.begin(), a.end());
             return a;
         });
     }
 }
 
-BENCHMARK(BM_flat_transform_with_back_insert_iterator_string);
 
-void BM_std_transform_with_back_insert_iterator(benchmark::State&state) {
+void BM_std_transform_with_back_insert_iterator(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<double>();
 
-    for (auto const&_: state) {
-        std::vector<std::vector<std::vector<double>>> dest;
+    for (auto const &_: state) {
+        std::vector<std::vector<std::vector<double> > > dest;
         dest.reserve(arr.size());
-        std::transform(arr.begin(), arr.end(), std::back_inserter(dest), [](std::vector<std::vector<double>>&a) {
-            std::vector<std::vector<double>> destSubVector(a.size());
+        std::transform(arr.begin(), arr.end(), std::back_inserter(dest), [](std::vector<std::vector<double> > &a) {
+            std::vector<std::vector<double> > destSubVector(a.size());
             // destSubVector.reserve(a.size());
-            std::transform(a.begin(), a.end(), destSubVector.begin(), [](std::vector<double>&a) {
+            std::transform(a.begin(), a.end(), destSubVector.begin(), [](std::vector<double> &a) {
                 std::vector<double> destSubVectorSubVector(a.size());
                 // destSubVectorSubVector.reserve(a.size());
-                std::transform(a.begin(), a.end(), destSubVectorSubVector.begin(), [](double&a) {
+                std::transform(a.begin(), a.end(), destSubVectorSubVector.begin(), [](double &a) {
                     return a + 1;
                 });
                 return destSubVectorSubVector;
@@ -248,22 +240,21 @@ void BM_std_transform_with_back_insert_iterator(benchmark::State&state) {
     }
 }
 
-BENCHMARK(BM_std_transform_with_back_insert_iterator);
 
-void BM_std_transform_with_back_insert_iterator_string(benchmark::State&state) {
+void BM_std_transform_with_back_insert_iterator_string(benchmark::State &state) {
     using namespace dim;
     auto arr = random_generate_vector<std::string>();
 
-    for (auto const&_: state) {
-        std::vector<std::vector<std::vector<std::string>>> dest;
+    for (auto const &_: state) {
+        std::vector<std::vector<std::vector<std::string> > > dest;
         dest.reserve(arr.size());
-        std::transform(arr.begin(), arr.end(), std::back_inserter(dest), [](std::vector<std::vector<std::string>>&a) {
-            std::vector<std::vector<std::string>> destSubVector(a.size());
+        std::transform(arr.begin(), arr.end(), std::back_inserter(dest), [](std::vector<std::vector<std::string> > &a) {
+            std::vector<std::vector<std::string> > destSubVector(a.size());
             // destSubVector.reserve(a.size());
-            std::transform(a.begin(), a.end(), destSubVector.begin(), [](std::vector<std::string>&a) {
+            std::transform(a.begin(), a.end(), destSubVector.begin(), [](std::vector<std::string> &a) {
                 std::vector<std::string> destSubVectorSubVector(a.size());
                 // destSubVectorSubVector.reserve(a.size());
-                std::transform(a.begin(), a.end(), destSubVectorSubVector.begin(), [](std::string&a) {
+                std::transform(a.begin(), a.end(), destSubVectorSubVector.begin(), [](std::string &a) {
                     std::reverse(a.begin(), a.end());
                     return a;
                 });
@@ -274,6 +265,43 @@ void BM_std_transform_with_back_insert_iterator_string(benchmark::State&state) {
     }
 }
 
-BENCHMARK(BM_std_transform_with_back_insert_iterator_string);
+
+void oatppTest(benchmark::State &state) {
+    using namespace meta_operation::type_traits::oatpp;
+    using namespace meta_operation::helper;
+
+    // meta_operation::type_traits::oatpp::is_oatpp_wrapper
+    static_assert(is_oatpp_wrapper<oatpp::Vector<oatpp::Float64> >::value);
+    static_assert(!is_oatpp_wrapper<std::vector<double> >::value);
+    static_assert(is_oatpp_wrapper<oatpp::UnorderedMap<oatpp::String, oatpp::Float64>>::value);
+
+    // meta_operation::type_traits::oatpp::is_oatpp_container_wrapper
+    static_assert(is_oatpp_container_wrapper<oatpp::Vector<double> >::value);
+    static_assert(!is_oatpp_container_wrapper<oatpp::Float64>::value);
+    static_assert(!is_oatpp_container_wrapper<std::vector<double> >::value);
+    static_assert(!is_oatpp_container_wrapper<double>::value);
+    static_assert(is_oatpp_container_wrapper<oatpp::UnorderedMap<oatpp::String, oatpp::Float64> >::value);
+
+    // meta_operation::type_traits::oatpp::is_oatpp_primitive_wrapper
+    static_assert(is_oatpp_primitive_wrapper<oatpp::Float64>::value);
+    static_assert(!is_oatpp_primitive_wrapper<oatpp::Vector<double> >::value);
+    static_assert(!is_oatpp_primitive_wrapper<std::vector<double> >::value);
+    static_assert(!is_oatpp_primitive_wrapper<double>::value);
+    static_assert(is_oatpp_primitive_wrapper<oatpp::Int64>::value);
+
+}
+
+// BENCHMARK(BM_create_vector_and_resize_double);
+// BENCHMARK(BM_create_vector_and_resize_std_string);
+// BENCHMARK(BM_flat_transform);
+// BENCHMARK(BM_std_transform_double);
+// BENCHMARK(BM_std_transform_string);
+// BENCHMARK(BM_flat_transform_with_pre_resize_double);
+// BENCHMARK(BM_flat_transform_with_pre_resize_string);
+// BENCHMARK(BM_flat_transform_with_back_insert_iterator);
+// BENCHMARK(BM_flat_transform_with_back_insert_iterator_string);
+// BENCHMARK(BM_std_transform_with_back_insert_iterator);
+// BENCHMARK(BM_std_transform_with_back_insert_iterator_string);
+BENCHMARK(oatppTest);
 
 BENCHMARK_MAIN();

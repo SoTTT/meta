@@ -24,8 +24,32 @@ set(BENCHMARK_DOWNLOAD_DEPENDENCIES ON    # 自动下载 GoogleTest
 # 拉取并构建 benchmark
 FetchContent_MakeAvailable(benchmark)
 
-add_executable(meta main.cpp
+# 声明 Abseil
+FetchContent_Declare(
+        abseil
+        GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+        GIT_TAG 20240116.2  # 指定稳定版本
 )
+
+# 启用 C++ 标准传递
+set(ABSL_PROPAGATE_CXX_STD ON)
+
+# 下载并构建 Abseil
+FetchContent_MakeAvailable(abseil)
+
+FetchContent_Declare(
+        oatpp
+        GIT_REPOSITORY https://github.com/oatpp/oatpp
+        GIT_TAG        1.3.0
+)
+
+set(BUILD_TESTING OFF CACHE INTERNAL "")
+
+FetchContent_MakeAvailable(oatpp)
+
+add_executable(meta main.cpp
+        oatpp_helper.hpp
+        traits.hpp)
 
 target_include_directories(meta PRIVATE
         ${benchmark_SOURCE_DIR}/include)
@@ -33,4 +57,7 @@ target_include_directories(meta PRIVATE
 # 链接依赖库
 target_link_libraries(meta PRIVATE
         benchmark::benchmark
-        benchmark::benchmark_main)
+        benchmark::benchmark_main
+        absl::base
+        absl::strings
+        oatpp)
