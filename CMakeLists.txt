@@ -49,7 +49,8 @@ FetchContent_MakeAvailable(oatpp)
 
 add_executable(meta main.cpp
         oatpp_helper.hpp
-        traits.hpp)
+        traits.hpp
+        template_helper.hpp)
 
 target_include_directories(meta PRIVATE
         ${benchmark_SOURCE_DIR}/include)

@@ -2,7 +2,7 @@
 #include <list>
 #include <vector>
 
-#include "meta_operation.hpp"
+#include "md_operation.hpp"
 #include "oatpp_helper.hpp"
 
 #include <benchmark/benchmark.h>
@@ -268,12 +268,11 @@ void BM_std_transform_with_back_insert_iterator_string(benchmark::State &state) 
 
 void oatppTest(benchmark::State &state) {
     using namespace meta_operation::type_traits::oatpp;
-    using namespace meta_operation::helper;
 
     // meta_operation::type_traits::oatpp::is_oatpp_wrapper
     static_assert(is_oatpp_wrapper<oatpp::Vector<oatpp::Float64> >::value);
     static_assert(!is_oatpp_wrapper<std::vector<double> >::value);
-    static_assert(is_oatpp_wrapper<oatpp::UnorderedMap<oatpp::String, oatpp::Float64>>::value);
+    static_assert(is_oatpp_wrapper<oatpp::UnorderedMap<oatpp::String, oatpp::Float64> >::value);
 
     // meta_operation::type_traits::oatpp::is_oatpp_container_wrapper
     static_assert(is_oatpp_container_wrapper<oatpp::Vector<double> >::value);
@@ -289,6 +288,21 @@ void oatppTest(benchmark::State &state) {
     static_assert(!is_oatpp_primitive_wrapper<double>::value);
     static_assert(is_oatpp_primitive_wrapper<oatpp::Int64>::value);
 
+    using namespace oatpp::data::mapping::type;
+    auto value = static_cast<__class::Collection::PolymorphicDispatcher const *>
+            (oatpp::Vector<Float64>::Class::getType()->polymorphicDispatcher)
+            ->createObject().cast<oatpp::Vector<Float64> >();
+
+    static_assert(std::is_same<unwrapper<double>::type, double>::value);
+    static_assert(std::is_same<unwrapper<oatpp::Float64>::type, double>::value);
+    static_assert(!std::is_same<unwrapper<oatpp::Float64>::type, float>::value);
+    // std::cout << typeid(unwrapper<oatpp::Vector<oatpp::Vector<oatpp::Float64> > >::type).name();
+    static_assert(std::is_same<unwrapper<oatpp::Vector<oatpp::Float64> >::type, std::vector<double> >::value);
+    static_assert(std::is_same<
+        unwrapper<oatpp::Vector<oatpp::Vector<oatpp::Float64> > >::type,
+        std::vector<std::vector<double>>
+    >::value);
+    // unwrapper<double>::type a = 1;
 }
 
 // BENCHMARK(BM_create_vector_and_resize_double);

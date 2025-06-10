@@ -5,85 +5,16 @@
 #include <type_traits>
 #include <absl/meta/type_traits.h>
 #include <absl/utility/utility.h>
-#include <oatpp/core/Types.hpp>
+#include "traits.hpp"
 
 namespace meta_operation {
     /**
      * @brief 这个命名空间提供其它工具所需要的类型萃取器和辅助模板
      */
     namespace helper {
-        template<typename... Args>
-        using void_t = void;
-
-        /**
-         * @brief 鉴别一个类型是否满足容器的语法要求
-         * @tparam T 要鉴别的类型
-         * @memberof value 鉴别的结果
-         */
-        template<typename T, typename = void>
-        struct is_container : std::false_type {
-        };
-
-        template<typename char_t>
-        struct is_container<std::basic_string<char_t> > : std::false_type {
-        };
-
-        template<typename T>
-        struct is_container<T, void_t<
-                    typename T::value_type,
-                    typename T::iterator,
-                    decltype(std::declval<T>().begin()),
-                    decltype(std::declval<T>().end())
-                > > : std::true_type {
-        };
-
-        /**
-         * @brief 鉴别一个类型是否是由模板实例化而来
-         * @tparam T 需要鉴别的类型
-         */
-        template<typename T>
-        struct is_template_instance : std::false_type {
-        };
-
-        template<template <typename...> class C, typename... Args>
-        struct is_template_instance<C<Args...> > : std::true_type {
-        };
-
-        /**
-         * @brief 鉴别一个类型是否本身是容器但其元素类型不是容器
-         * @tparam T 要鉴别的类型
-         */
-        template<typename T>
-        struct is_container_and_element_type_is_not_container :
-                std::integral_constant<bool, is_container<T>::value
-                                             && !is_container<typename T::value_type>::value> {
-        };
-
-        /**
-         * @brief 鉴别一个类型T是否由一个模板TMP实例化而来
-         * @tparam T 鉴别的目标类型
-         * @tparam TMP 鉴别的目标模板
-         */
-        template<typename T, template <typename...> class TMP>
-        struct is_specialization_of : std::false_type {
-        };
-
-        template<template <typename...> class TMP, typename... Args>
-        struct is_specialization_of<TMP<Args...>, TMP> : std::true_type {
-        };
-
-        template<typename Iterator>
-        struct iterator_traits_adaptor : std::iterator_traits<Iterator> {
-        };
-
-        template<typename Container>
-        struct iterator_traits_adaptor<std::back_insert_iterator<Container> > :
-                std::iterator_traits<typename Container::iterator> {
-        };
-
         template<typename Iterator>
         struct container_view {
-            using value_type = typename iterator_traits_adaptor<Iterator>::value_type;
+            using value_type = typename type_traits::iterator_traits_adaptor<Iterator>::value_type;
             using iterator = Iterator;
 
             Iterator &_begin;
@@ -98,29 +29,6 @@ namespace meta_operation {
     }
 
     namespace impl {
-        template<int Ns, typename T, typename... Other>
-        struct get_Ns_arg {
-            using type = typename get_Ns_arg<Ns - 1, Other...>::type;
-        };
-
-        template<typename T, typename... Other>
-        struct get_Ns_arg<0, T, Other...> {
-            using type = T;
-        };
-
-        template<typename T, typename N>
-        struct match_template_arguments_helper;
-
-        template<template<typename...> class T, typename N, typename... E>
-        struct match_template_arguments_helper<T<E...>, N> {
-            template<typename... Args>
-            using type = T<Args...>;
-        };
-
-        template<typename... Types>
-        struct wrapper_type_list {
-        };
-
 
         template<typename Container, typename Transformer>
         void flat_foreach(Container &container, Transformer &&transformer, std::true_type) {
@@ -132,7 +40,7 @@ namespace meta_operation {
         void flat_foreach(Container &container, Transformer &&transformer, std::false_type) {
             for (auto &item: container) {
                 impl::flat_foreach(item, std::forward<Transformer>(transformer),
-                                   helper::is_container_and_element_type_is_not_container<absl::remove_cvref_t<
+                                   type_traits::is_container_and_element_type_is_not_container<absl::remove_cvref_t<
                                        Container> >{}
                 );
             }
@@ -150,7 +58,7 @@ namespace meta_operation {
                                absl::remove_cvref_t<decltype(item)> inner;
                                inner.reserve(item.size());
                                impl::flat_transform(item, std::back_inserter(inner), transformer,
-                                                    helper::is_container_and_element_type_is_not_container<
+                                                    type_traits::is_container_and_element_type_is_not_container<
                                                         absl::remove_cvref_t<decltype(item)> >{});
                                return inner;
                            });
@@ -173,7 +81,7 @@ namespace meta_operation {
                                absl::remove_cvref_t<decltype(item)> inner;
                                inner.reserve(item.size());
                                impl::flat_transform(item, std::back_inserter(inner), transformer,
-                                                    helper::is_container_and_element_type_is_not_container<
+                                                    type_traits::is_container_and_element_type_is_not_container<
                                                         absl::remove_cvref_t<decltype(item)> >{});
                                return inner;
                            });
@@ -200,85 +108,11 @@ namespace meta_operation {
         void flat_foreach_nest(Container &container, DestContainer &dest, Transformer &&transformer, std::false_type) {
             for (int i = 0; i < container.size(); i++) {
                 flat_foreach_nest(container[i], dest[i], std::forward<Transformer>(transformer),
-                                  helper::is_container_and_element_type_is_not_container<
+                                  type_traits::is_container_and_element_type_is_not_container<
                                       absl::remove_cvref_t<decltype(container[i])> >{});
             }
         }
     }
-
-    template<int Ns, typename... Other>
-    struct get_Ns_arg {
-        using type = typename impl::get_Ns_arg<Ns, Other...>::type;
-    };
-
-    template<typename... Others>
-    struct get_first_arg {
-        using type = typename get_Ns_arg<0, Others...>::type;
-    };
-
-    template<typename... Others>
-    struct get_last_arg {
-        using type = typename get_Ns_arg<sizeof...(Others) - 1, Others...>::type;
-    };
-
-    template<int Ns, typename T>
-    struct get_Ns_arg_from_template;
-
-    /**
-     * @brief 获取一个模板实例化类型的第Ns个参数的类型
-     * @tparam T 一个模板参数类型
-     * @tparam Ns 一个整数索引，指出想要获取的类型在类型列表中的位置
-     * @tparam E 边长参数包，用于接受变长模板模板参数的参数列表
-     * @memberof type 模板实例化类型的第Ns个模板参数
-     */
-    template<template<class...> class T, int Ns, typename... E>
-    struct get_Ns_arg_from_template<Ns, T<E...> > {
-        using type = typename get_Ns_arg<Ns, E...>::type;
-    };
-
-    template<typename T>
-    struct get_last_arg_from_template;
-
-    template<template<class...> class T, typename... E>
-    struct get_last_arg_from_template<T<E...> > {
-        using type = typename get_last_arg<E...>::type;
-    };
-
-    /**
-     * @brief 给出一个模板实例化类型TMP，并以给出的变长类型参数包N替换它的模板实参
-     * @tparam TMP 一个模板实例化类型，如std::vector<int>
-     * @tparam N 一个变长类型参数包
-     * @memberof type 模板实例化类型的第Ns个模板参数
-     */
-    template<typename TMP, typename... N>
-    struct replace_type {
-        using type = typename impl::match_template_arguments_helper
-        <TMP, impl::wrapper_type_list<N...> >::template type<N...>;
-    };
-
-    template<typename T>
-    struct get_result_type;
-
-    template<typename ResultType, typename... Args>
-    struct get_result_type<ResultType(Args...)> {
-        using type = ResultType;
-    };
-
-    template<typename T>
-    struct rank {
-        static constexpr int n = 0;
-    };
-
-    template<template<class...> class TMP, typename... TemplateArgs>
-    struct rank<TMP<TemplateArgs...> > {
-        static constexpr int n = rank<typename get_first_arg<TemplateArgs...>::type>::n + 1;
-    };
-
-    template<typename T>
-    constexpr int get_rank(T &&) {
-        return rank<typename std::remove_reference<typename std::remove_cv<T>::type>::type>::n;
-    }
-
 
     /**
      * @brief 遍历一个容器并将容器的各个元素应用到transformer，在遍历时将拥有多个维度的容器视为一维的
@@ -291,7 +125,7 @@ namespace meta_operation {
     void flat_foreach(Container &container, Transformer &&transformer) {
         impl::flat_foreach(container,
                            std::forward<Transformer>(transformer),
-                           helper::is_container_and_element_type_is_not_container<
+                           type_traits::is_container_and_element_type_is_not_container<
                                absl::remove_cvref_t<Container> >{}
         );
     }
@@ -301,29 +135,6 @@ namespace meta_operation {
         helper::container_view<Iterator> view{begin, end};
         flat_foreach(view, std::forward<Transformer>(transformer));
     }
-
-    /**
-     * @brief 将类型的外层模板类型转换为给定的模板类型，并保持类型T的维度不变
-     * @tparam T 需要转换的原始的原始模板实例化对象类型
-     * @tparam Container 转换目标的模板
-     * @tparam Placement 为模板特化实现保留的占位符
-     * @memberof type 转换得到的类型
-     */
-    template<typename T, template <typename...> class Container, typename Placement=void>
-    struct replace_other_container_type_with {
-        using type = T;
-    };
-
-    template<typename T, template <typename...> class Container>
-    struct replace_other_container_type_with<T, Container, typename std::enable_if<helper::is_container<
-                T>::value>::type> {
-        using type = Container<typename replace_other_container_type_with<typename T::value_type, Container>::type>;
-    };
-
-
-    template<typename T, template <typename...> class Container>
-    using replace_other_container_type_with_t = typename replace_other_container_type_with<T, Container>::type;
-
 
     /**
      * @brief 遍历container，并将容器中的每一个元素应用于一元操作transformer，并返回由每一个操作结果构成的容器，在遍历时将有多个维度的容器视为一维的
@@ -338,7 +149,7 @@ namespace meta_operation {
         impl::flat_transform(container,
                              dest.begin(),
                              std::forward<Transformer>(transformer),
-                             helper::is_container_and_element_type_is_not_container<absl::remove_cvref_t<Container> >
+                             type_traits::is_container_and_element_type_is_not_container<absl::remove_cvref_t<Container> >
                              {});
         return dest;
     }
@@ -354,7 +165,7 @@ namespace meta_operation {
     void flat_transform(InputIt begin, InputIt end, OutputIt dest, Transformer &&transformer) {
         helper::container_view<InputIt> view{begin, end};
         impl::flat_transform(view, dest, std::forward<Transformer>(transformer),
-                             helper::is_container_and_element_type_is_not_container<helper::container_view<OutputIt> >
+                             type_traits::is_container_and_element_type_is_not_container<helper::container_view<OutputIt> >
                              {});
     }
 
@@ -387,7 +198,7 @@ namespace meta_operation {
         //                          std::back_insert_iterator<DestContainer>>>
         //                      {});
         impl::flat_transform(begin, end, dest, transformer,
-                             helper::is_container_and_element_type_is_not_container<helper::container_view<
+                             type_traits::is_container_and_element_type_is_not_container<helper::container_view<
                                  std::back_insert_iterator<DestContainer> > >
                              {});
     }
@@ -402,7 +213,7 @@ namespace meta_operation {
     template<typename Container, typename DestContainer, typename Transformer>
     void flat_transform(Container &container, DestContainer &dest, Transformer &&transformer) {
         impl::flat_foreach_nest(container, dest, std::forward<Transformer>(transformer),
-                                helper::is_container_and_element_type_is_not_container<absl::remove_cvref_t<Container> >
+                                type_traits::is_container_and_element_type_is_not_container<absl::remove_cvref_t<Container> >
                                 {});
     }
 }
