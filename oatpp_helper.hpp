@@ -50,25 +50,23 @@ namespace meta_operation {
             };
 
             template<typename T, typename = void>
-            struct value_type_is_oatpp_container_warper : std::false_type {
+            struct value_type_is_oatpp_container_wrapper : std::false_type {
             };
 
             template<typename T>
-            struct value_type_is_oatpp_container_warper<T, absl::enable_if_t<
+            struct value_type_is_oatpp_container_wrapper<T, absl::enable_if_t<
                         is_container<T>::value &&
                         is_oatpp_container_wrapper<typename T::value_type>::value> >
                     : std::true_type {
             };
 
-            template<typename T>
-            struct is_oatpp_container_wrapper_clazz : std::false_type {
-            };
 
-            template<typename T>
-            struct is_oatpp_container_wrapper_clazz<::oatpp::data::mapping::type::__class::Vector<T> >
-                    : std::true_type {
-            };
-
+            /**
+             * @brief 获取oatpp包装类型对应的原始类型，对于嵌套的容器包装类型，会递归地依次将每层容器包装类型替换为对应的原始类型,
+             * 对于非oatpp包装类型的类型，返回其自身
+             * @tparam T 待处理的类型
+             * @memberof type 解包装后的类型
+             */
             template<typename T, typename = void>
             struct unwrapper {
                 using type = T;
@@ -87,6 +85,51 @@ namespace meta_operation {
                         is_oatpp_wrapper<T>::value &&
                         is_oatpp_primitive_wrapper<T>::value> > {
                 using type = typename T::ObjectType;
+            };
+
+            namespace impl {
+
+                template<typename WrapperContainerType, typename UnwrapperContainerType>
+                void deep_unwrapper(WrapperContainerType const &wrapperContainer,
+                                    UnwrapperContainerType &unwrapperContainer,
+                                    std::true_type) {
+                    unwrapperContainer.reserve(wrapperContainer->size());
+                    for (int i = 0; i < wrapperContainer->size(); ++i) {
+                        unwrapperContainer.push_back(wrapperContainer[i]);
+                    }
+                }
+
+                template<typename WrapperContainerType, typename UnwrapperContainerType>
+                void deep_unwrapper(WrapperContainerType const &wrapperContainer,
+                                    UnwrapperContainerType &unwrapperContainer,
+                                    std::false_type) {
+                    unwrapperContainer.resize(wrapperContainer->size());
+                    for (int i = 0; i < wrapperContainer->size(); ++i) {
+                        deep_unwrapper(wrapperContainer[i], unwrapperContainer[i],
+                                       is_container_and_element_type_is_not_container<typename
+                                           UnwrapperContainerType::value_type>{});
+                    }
+                }
+
+
+            }
+
+            template<typename T>
+            auto deep_unwrapper(T const &container) -> typename unwrapper<T>::type {
+                typename unwrapper<T>::type unwrapperContainer;
+                impl::deep_unwrapper(container, unwrapperContainer,
+                                     is_container_and_element_type_is_not_container<typename unwrapper<
+                                         T>::type>{});
+                return unwrapperContainer;
+            }
+
+            template<typename T>
+            struct is_oatpp_container_wrapper_clazz : std::false_type {
+            };
+
+            template<typename T>
+            struct is_oatpp_container_wrapper_clazz<::oatpp::data::mapping::type::__class::Vector<T> >
+                    : std::true_type {
             };
 
             template<typename T>
