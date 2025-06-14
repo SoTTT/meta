@@ -8,11 +8,20 @@
 #include <type_traits>
 #include <oatpp/core/Types.hpp>
 
+#include "oatpp_helper.hpp"
 #include "template_helper.hpp"
 
 namespace meta_operation {
     namespace type_traits {
         namespace oatpp {
+            template<typename T>
+            struct is_oatpp_void_pointer_wrapper : std::integral_constant<bool, std::is_same<T, ::oatpp::Void>::value> {
+            };
+
+            template<typename T>
+            struct is_oatpp_any_wrapper : std::integral_constant<bool, std::is_same<T, ::oatpp::Any>::value> {
+            };
+
             template<typename T, typename = void>
             struct is_oatpp_wrapper : std::false_type {
             };
@@ -26,16 +35,53 @@ namespace meta_operation {
                         T> {
             };
 
+            template<>
+            struct is_oatpp_wrapper<::oatpp::String> : std::true_type {
+            };
+
+            template<>
+            struct is_oatpp_wrapper<::oatpp::Any> : std::true_type {
+            };
+
+            template<>
+            struct is_oatpp_wrapper<::oatpp::Void> : std::true_type {
+            };
+
+            // template<typename T>
+            // struct is_oatpp_wrapper<T, std::enable_if_t<
+            //             absl::disjunction<
+            //                 is_oatpp_any_pointer_wrapper<T>,
+            //                 is_oatpp_void_pointer_wrapper<T>,
+            //                 std::is_same<T, ::oatpp::String>
+            //             >::value
+            //         > > : std::true_type {
+            // };
+
+
             template<typename T, typename = void>
             struct is_oatpp_primitive_wrapper : std::false_type {
             };
 
             template<typename T>
             struct is_oatpp_primitive_wrapper<T, absl::enable_if_t<is_oatpp_wrapper<T>::value> >
-                    : std::is_same<::oatpp::data::mapping::type::Primitive<
-                            typename T::ObjectType,
-                            typename template_helper::get_last_arg_from_template<T>::type>,
-                        T> {
+                    : absl::conjunction<std::is_same<::oatpp::data::mapping::type::Primitive<
+                                typename T::ObjectType,
+                                typename template_helper::get_last_arg_from_template<T>::type>,
+                            T>,
+                        absl::negation<is_oatpp_void_pointer_wrapper<T> >,
+                        absl::negation<is_oatpp_any_wrapper<T> > > {
+            };
+
+            template<>
+            struct is_oatpp_primitive_wrapper<::oatpp::String> : std::true_type {
+            };
+
+            template<>
+            struct is_oatpp_primitive_wrapper<::oatpp::Any> : std::false_type {
+            };
+
+            template<>
+            struct is_oatpp_primitive_wrapper<::oatpp::Void> : std::false_type {
             };
 
             template<typename T, typename = void>
@@ -45,6 +91,7 @@ namespace meta_operation {
             template<typename T>
             struct is_oatpp_container_wrapper<T, absl::enable_if_t<
                         is_oatpp_wrapper<T>::value &&
+                        !is_oatpp_primitive_wrapper<T>::value &&
                         is_container<typename T::TemplateObjectType>::value> >
                     : std::true_type {
             };
@@ -56,6 +103,7 @@ namespace meta_operation {
             template<typename K, typename V>
             struct is_oatpp_map_container_wrapper<::oatpp::UnorderedMap<K, V> > : std::true_type {
             };
+
 
             template<typename T, typename = void>
             struct value_type_is_oatpp_container_wrapper : std::false_type {
@@ -108,13 +156,12 @@ namespace meta_operation {
                 >::type;
             };
 
-            template<typename T>
-            struct unwrapper<T, absl::enable_if_t<std::is_same<T, ::oatpp::String>::value>> {
+            template<>
+            struct unwrapper<::oatpp::String> {
                 using type = std::string;
             };
 
             namespace impl {
-
                 template<typename WrapperContainerType, typename UnwrapperContainerType, typename = void>
                 struct deep_unwrapper;
 
@@ -122,26 +169,26 @@ namespace meta_operation {
                 template<typename WrapperContainerType, typename UnwrapperContainerType>
                 struct deep_unwrapper<WrapperContainerType, UnwrapperContainerType,
                             absl::enable_if_t<!is_oatpp_map_container_wrapper<WrapperContainerType>::value> > {
-                    void operator()(WrapperContainerType const &wrapperContainer,
-                                    UnwrapperContainerType &unwrapperContainer, std::true_type) {
+                    static void do_unwrapper(WrapperContainerType const &wrapperContainer,
+                                             UnwrapperContainerType &unwrapperContainer, std::true_type) {
                         unwrapperContainer.reserve(wrapperContainer->size());
                         for (int i = 0; i < wrapperContainer->size(); ++i) {
                             unwrapperContainer.push_back(wrapperContainer[i]);
                         }
                     }
 
-                    void operator()(WrapperContainerType const &wrapperContainer,
-                                    UnwrapperContainerType &unwrapperContainer, std::false_type) {
+                    static void do_unwrapper(WrapperContainerType const &wrapperContainer,
+                                             UnwrapperContainerType &unwrapperContainer, std::false_type) {
                         unwrapperContainer.resize(wrapperContainer->size());
                         for (int i = 0; i < wrapperContainer->size(); ++i) {
                             deep_unwrapper<
                                 absl::remove_cvref_t<decltype(wrapperContainer[i])>,
                                 absl::remove_cvref_t<decltype(unwrapperContainer[i])>
-                            >{}
-                            (wrapperContainer[i],
-                             unwrapperContainer[i],
-                             is_container_and_element_type_is_not_container<typename UnwrapperContainerType::value_type>
-                             {});
+                            >::do_unwrapper(wrapperContainer[i],
+                                            unwrapperContainer[i],
+                                            is_container_and_element_type_is_not_container<typename
+                                                UnwrapperContainerType::value_type>
+                                            {});
                         }
                     }
                 };
@@ -149,23 +196,22 @@ namespace meta_operation {
                 template<typename WrapperContainerType, typename UnwrapperContainerType>
                 struct deep_unwrapper<WrapperContainerType, UnwrapperContainerType,
                             absl::enable_if_t<is_oatpp_map_container_wrapper<WrapperContainerType>::value> > {
-                    void operator()(WrapperContainerType const &wrapperContainer,
-                                    UnwrapperContainerType &unwrapperContainer, std::false_type) {
+                    static void do_unwrapper(WrapperContainerType const &wrapperContainer,
+                                             UnwrapperContainerType &unwrapperContainer, std::false_type) {
                         for (auto it = wrapperContainer->begin(); it != wrapperContainer->end(); ++it) {
                             unwrapperContainer[it->first] =
                                     typename unwrapper<absl::remove_cvref_t<decltype(it->second)> >::type{};
                             deep_unwrapper<
                                 absl::remove_cvref_t<decltype(wrapperContainer[it->first])>,
                                 absl::remove_cvref_t<decltype(unwrapperContainer[it->first])>
-                            >{}
-                            (wrapperContainer[it->first], unwrapperContainer[it->first],
-                             is_container_and_element_type_is_not_container<typename
-                                 UnwrapperContainerType::value_type>{});
+                            >::do_unwrapper(wrapperContainer[it->first], unwrapperContainer[it->first],
+                                            is_container_and_element_type_is_not_container<typename
+                                                UnwrapperContainerType::value_type>{});
                         }
                     }
 
-                    void operator()(WrapperContainerType const &wrapperContainer,
-                                    UnwrapperContainerType &unwrapperContainer, std::true_type) {
+                    static void do_unwrapper(WrapperContainerType const &wrapperContainer,
+                                             UnwrapperContainerType &unwrapperContainer, std::true_type) {
                         for (auto it = wrapperContainer->begin(); it != wrapperContainer->end(); ++it) {
                             unwrapperContainer[it->first] = it->second;
                         }
@@ -176,7 +222,7 @@ namespace meta_operation {
             template<typename T>
             auto deep_unwrapper(T const &container) -> typename unwrapper<T>::type {
                 typename unwrapper<T>::type unwrapperContainer;
-                impl::deep_unwrapper<T, typename unwrapper<T>::type>{}
+                impl::deep_unwrapper<T, typename unwrapper<T>::type>::do_unwrapper
                 (container, unwrapperContainer,
                  is_container_and_element_type_is_not_container<typename unwrapper<
                      T>::type>{});

@@ -318,6 +318,7 @@ void oatppTest(benchmark::State &state) {
     static_assert(std::is_same<unwrapper<double>::type, double>::value);
     static_assert(std::is_same<unwrapper<oatpp::Any>::type, oatpp::Any>::value);
     static_assert(std::is_same<unwrapper<oatpp::Void>::type, oatpp::Void>::value);
+    static_assert(std::is_same<unwrapper<oatpp::AbstractList>::type, std::list<oatpp::Void>>::value);
 
     oatpp::Vector<oatpp::Vector<oatpp::Float64> > v{{1, 2, 3, 4, 5}};
     auto v2 = deep_unwrapper(v);
