@@ -50,6 +50,14 @@ namespace meta_operation {
             };
 
             template<typename T, typename = void>
+            struct is_oatpp_map_container_wrapper : std::false_type {
+            };
+
+            template<typename K, typename V>
+            struct is_oatpp_map_container_wrapper<::oatpp::UnorderedMap<K, V> > : std::true_type {
+            };
+
+            template<typename T, typename = void>
             struct value_type_is_oatpp_container_wrapper : std::false_type {
             };
 
@@ -73,7 +81,9 @@ namespace meta_operation {
             };
 
             template<typename T>
-            struct unwrapper<T, absl::enable_if_t<is_oatpp_container_wrapper<T>::value> > {
+            struct unwrapper<T, absl::enable_if_t<
+                        is_oatpp_container_wrapper<T>::value &&
+                        !is_oatpp_map_container_wrapper<T>::value> > {
                 using type = typename template_helper::replace_type<
                     typename T::TemplateObjectType,
                     typename unwrapper<typename T::TemplateObjectType::value_type>::type
@@ -87,39 +97,89 @@ namespace meta_operation {
                 using type = typename T::ObjectType;
             };
 
+            template<typename T>
+            struct unwrapper<T, absl::enable_if_t<
+                        is_oatpp_container_wrapper<T>::value
+                        && is_oatpp_map_container_wrapper<T>::value> > {
+                using type = typename template_helper::replace_type<
+                    typename T::TemplateObjectType,
+                    typename unwrapper<typename T::TemplateObjectType::key_type>::type,
+                    typename unwrapper<typename T::TemplateObjectType::mapped_type>::type
+                >::type;
+            };
+
+            template<typename T>
+            struct unwrapper<T, absl::enable_if_t<std::is_same<T, ::oatpp::String>::value>> {
+                using type = std::string;
+            };
+
             namespace impl {
 
-                template<typename WrapperContainerType, typename UnwrapperContainerType>
-                void deep_unwrapper(WrapperContainerType const &wrapperContainer,
-                                    UnwrapperContainerType &unwrapperContainer,
-                                    std::true_type) {
-                    unwrapperContainer.reserve(wrapperContainer->size());
-                    for (int i = 0; i < wrapperContainer->size(); ++i) {
-                        unwrapperContainer.push_back(wrapperContainer[i]);
-                    }
-                }
+                template<typename WrapperContainerType, typename UnwrapperContainerType, typename = void>
+                struct deep_unwrapper;
+
 
                 template<typename WrapperContainerType, typename UnwrapperContainerType>
-                void deep_unwrapper(WrapperContainerType const &wrapperContainer,
-                                    UnwrapperContainerType &unwrapperContainer,
-                                    std::false_type) {
-                    unwrapperContainer.resize(wrapperContainer->size());
-                    for (int i = 0; i < wrapperContainer->size(); ++i) {
-                        deep_unwrapper(wrapperContainer[i], unwrapperContainer[i],
-                                       is_container_and_element_type_is_not_container<typename
-                                           UnwrapperContainerType::value_type>{});
+                struct deep_unwrapper<WrapperContainerType, UnwrapperContainerType,
+                            absl::enable_if_t<!is_oatpp_map_container_wrapper<WrapperContainerType>::value> > {
+                    void operator()(WrapperContainerType const &wrapperContainer,
+                                    UnwrapperContainerType &unwrapperContainer, std::true_type) {
+                        unwrapperContainer.reserve(wrapperContainer->size());
+                        for (int i = 0; i < wrapperContainer->size(); ++i) {
+                            unwrapperContainer.push_back(wrapperContainer[i]);
+                        }
                     }
-                }
 
+                    void operator()(WrapperContainerType const &wrapperContainer,
+                                    UnwrapperContainerType &unwrapperContainer, std::false_type) {
+                        unwrapperContainer.resize(wrapperContainer->size());
+                        for (int i = 0; i < wrapperContainer->size(); ++i) {
+                            deep_unwrapper<
+                                absl::remove_cvref_t<decltype(wrapperContainer[i])>,
+                                absl::remove_cvref_t<decltype(unwrapperContainer[i])>
+                            >{}
+                            (wrapperContainer[i],
+                             unwrapperContainer[i],
+                             is_container_and_element_type_is_not_container<typename UnwrapperContainerType::value_type>
+                             {});
+                        }
+                    }
+                };
 
+                template<typename WrapperContainerType, typename UnwrapperContainerType>
+                struct deep_unwrapper<WrapperContainerType, UnwrapperContainerType,
+                            absl::enable_if_t<is_oatpp_map_container_wrapper<WrapperContainerType>::value> > {
+                    void operator()(WrapperContainerType const &wrapperContainer,
+                                    UnwrapperContainerType &unwrapperContainer, std::false_type) {
+                        for (auto it = wrapperContainer->begin(); it != wrapperContainer->end(); ++it) {
+                            unwrapperContainer[it->first] =
+                                    typename unwrapper<absl::remove_cvref_t<decltype(it->second)> >::type{};
+                            deep_unwrapper<
+                                absl::remove_cvref_t<decltype(wrapperContainer[it->first])>,
+                                absl::remove_cvref_t<decltype(unwrapperContainer[it->first])>
+                            >{}
+                            (wrapperContainer[it->first], unwrapperContainer[it->first],
+                             is_container_and_element_type_is_not_container<typename
+                                 UnwrapperContainerType::value_type>{});
+                        }
+                    }
+
+                    void operator()(WrapperContainerType const &wrapperContainer,
+                                    UnwrapperContainerType &unwrapperContainer, std::true_type) {
+                        for (auto it = wrapperContainer->begin(); it != wrapperContainer->end(); ++it) {
+                            unwrapperContainer[it->first] = it->second;
+                        }
+                    }
+                };
             }
 
             template<typename T>
             auto deep_unwrapper(T const &container) -> typename unwrapper<T>::type {
                 typename unwrapper<T>::type unwrapperContainer;
-                impl::deep_unwrapper(container, unwrapperContainer,
-                                     is_container_and_element_type_is_not_container<typename unwrapper<
-                                         T>::type>{});
+                impl::deep_unwrapper<T, typename unwrapper<T>::type>{}
+                (container, unwrapperContainer,
+                 is_container_and_element_type_is_not_container<typename unwrapper<
+                     T>::type>{});
                 return unwrapperContainer;
             }
 

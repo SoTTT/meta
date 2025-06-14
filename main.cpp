@@ -288,6 +288,10 @@ void oatppTest(benchmark::State &state) {
     static_assert(!is_oatpp_primitive_wrapper<double>::value);
     static_assert(is_oatpp_primitive_wrapper<oatpp::Int64>::value);
 
+    // meta_operation::type_traits::oatpp::is_oatpp_map_container_wrapper
+    static_assert(is_oatpp_map_container_wrapper<oatpp::UnorderedMap<oatpp::String, oatpp::Float64> >::value);
+    static_assert(!is_oatpp_map_container_wrapper<oatpp::Vector<oatpp::Float64> >::value);
+
     using namespace oatpp::data::mapping::type;
     auto value = static_cast<__class::Collection::PolymorphicDispatcher const *>
             (oatpp::Vector<Float64>::Class::getType()->polymorphicDispatcher)
@@ -302,6 +306,18 @@ void oatppTest(benchmark::State &state) {
         unwrapper<oatpp::Vector<oatpp::Vector<oatpp::Float64> > >::type,
         std::vector<std::vector<double> >
     >::value);
+    static_assert(std::is_same<
+        unwrapper<oatpp::UnorderedMap<oatpp::Float64, oatpp::Float64> >::type,
+        std::unordered_map<double, double>
+    >::value);
+    static_assert(std::is_same<
+        unwrapper<oatpp::UnorderedMap<oatpp::Float64, oatpp::Vector<oatpp::List<oatpp::String> > > >::type,
+        std::unordered_map<double, std::vector<std::list<std::string> > >
+    >::value);
+    static_assert(std::is_same<unwrapper<oatpp::String>::type, std::string>::value);
+    static_assert(std::is_same<unwrapper<double>::type, double>::value);
+    static_assert(std::is_same<unwrapper<oatpp::Any>::type, oatpp::Any>::value);
+    static_assert(std::is_same<unwrapper<oatpp::Void>::type, oatpp::Void>::value);
 
     oatpp::Vector<oatpp::Vector<oatpp::Float64> > v{{1, 2, 3, 4, 5}};
     auto v2 = deep_unwrapper(v);
