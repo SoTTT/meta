@@ -273,6 +273,9 @@ void oatppTest(benchmark::State &state) {
     static_assert(is_oatpp_wrapper<oatpp::Vector<oatpp::Float64> >::value);
     static_assert(!is_oatpp_wrapper<std::vector<double> >::value);
     static_assert(is_oatpp_wrapper<oatpp::UnorderedMap<oatpp::String, oatpp::Float64> >::value);
+    static_assert(is_oatpp_wrapper<oatpp::String>::value);
+    static_assert(is_oatpp_wrapper<oatpp::Void>::value);
+    static_assert(is_oatpp_wrapper<oatpp::Any>::value);
 
     // meta_operation::type_traits::oatpp::is_oatpp_container_wrapper
     static_assert(is_oatpp_container_wrapper<oatpp::Vector<double> >::value);
@@ -280,6 +283,9 @@ void oatppTest(benchmark::State &state) {
     static_assert(!is_oatpp_container_wrapper<std::vector<double> >::value);
     static_assert(!is_oatpp_container_wrapper<double>::value);
     static_assert(is_oatpp_container_wrapper<oatpp::UnorderedMap<oatpp::String, oatpp::Float64> >::value);
+    static_assert(!is_oatpp_container_wrapper<oatpp::String>::value);
+    static_assert(!is_oatpp_container_wrapper<oatpp::Void>::value);
+    static_assert(!is_oatpp_container_wrapper<oatpp::Any>::value);
 
     // meta_operation::type_traits::oatpp::is_oatpp_primitive_wrapper
     static_assert(is_oatpp_primitive_wrapper<oatpp::Float64>::value);
@@ -287,6 +293,9 @@ void oatppTest(benchmark::State &state) {
     static_assert(!is_oatpp_primitive_wrapper<std::vector<double> >::value);
     static_assert(!is_oatpp_primitive_wrapper<double>::value);
     static_assert(is_oatpp_primitive_wrapper<oatpp::Int64>::value);
+    static_assert(!is_oatpp_primitive_wrapper<oatpp::String>::value);
+    static_assert(!is_oatpp_primitive_wrapper<oatpp::Void>::value);
+    static_assert(!is_oatpp_primitive_wrapper<oatpp::Any>::value);
 
     // meta_operation::type_traits::oatpp::is_oatpp_map_container_wrapper
     static_assert(is_oatpp_map_container_wrapper<oatpp::UnorderedMap<oatpp::String, oatpp::Float64> >::value);

@@ -73,7 +73,7 @@ namespace meta_operation {
             };
 
             template<>
-            struct is_oatpp_primitive_wrapper<::oatpp::String> : std::true_type {
+            struct is_oatpp_primitive_wrapper<::oatpp::String> : std::false_type {
             };
 
             template<>
