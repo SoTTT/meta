@@ -6,6 +6,7 @@
 #define TEMPLATE_HELPER_HPP
 
 #include <type_traits>
+#include <traits.hpp>
 
 namespace meta_operation {
     namespace template_helper {
