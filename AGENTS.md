@@ -4,7 +4,9 @@
 
 `oatpp-meta` 是一个**纯头文件 C++11 模板元编程库**（CMake target `oatpp_meta`，`INTERFACE`），
 在 std 类型与 oatpp 包装类型（`oatpp::Vector<T>`、`oatpp::String`、`DTOWrapper` 等）之间做
-**类型层深解包/深包装与运行时转换**。仅依赖 oatpp 1.3.0（CMake FetchContent 拉取，构建需联网）。
+**类型层深解包/深包装与运行时转换**。依赖 oatpp；其来源在 CMake 配置阶段由
+`OATPP_MODULES_LOCATION` 选择（仿官方 oatpp 模块：INSTALLED / EXTERNAL / CUSTOM，另加默认
+AUTO），逻辑见根 CMakeLists.txt 的「oatpp 依赖来源选择」段。
 代码注释与提交信息为中文，保持一致。
 
 ## 核心接口（src/meta.hpp，命名空间 `oatpp::meta`）
@@ -40,7 +42,8 @@
 - `test/` — `test.cpp`（Catch2 v2，含 `CATCH_CONFIG_MAIN`，22 个用例）+ `CMakeLists.txt`
   （FetchContent 拉 Catch2 v2.13.10；可执行 target `oatpp_meta_test`）
 - `README.md` — 面向库使用者的项目文档（核心接口 / 用法示例 / 构建测试），改动对外接口时记得同步
-- 根 `CMakeLists.txt` — 只设 C++11（`CMAKE_CXX_STANDARD 11`）并 `add_subdirectory(src test)`
+- 根 `CMakeLists.txt` — 设 C++11（`CMAKE_CXX_STANDARD 11`），并实现「oatpp 依赖来源选择」
+  （`OATPP_MODULES_LOCATION` 四态 + 嵌入保护 + 指引式报错），随后 `add_subdirectory(src test)`
 - `test/CMakeLists.txt` 里 `META_BUILD_COMPILE_FAIL_PROBES` 选项及 `compile_fail/cf*.cpp`
   GLOB 是**历史残骸**：`test/compile_fail/` 目录已删除，该选项目前是空操作。
 
@@ -50,18 +53,28 @@
 `[expose]`/`[control]` 缺陷用例体系）。命名空间曾为 `oatpp::meta_operation`，现为 `oatpp::meta`；
 代码注释中偶见的 CF01/CF03/CF06、ISSUE-* 编号只是历史背景。
 
-## 构建与测试（已验证：configure / build / 22 用例 120 断言全部通过）
+## 构建与测试
+
+依赖 oatpp 的来源由 `OATPP_MODULES_LOCATION` 决定（默认 AUTO）：
+
+- `AUTO`：本机已有安装的 oatpp 1.3.0+ 则 `find_package` 使用，否则回退 `EXTERNAL`；
+- `INSTALLED`：要求已安装 oatpp（可用 `oatpp_DIR` 指定自定义安装位置）；
+- `EXTERNAL`：构建阶段从 GitHub 下载并编译 oatpp。默认拉 `origin/master`（非固定版本），
+  需要可复现请固定 `-DOATPP_GIT_TAG=1.3.0`（本仓库基于 1.3.0 验证）；
+- `CUSTOM`：由 `OATPP_DIR_SRC`（含 oatpp 头文件）/ `OATPP_DIR_LIB`（含 liboatpp）本地提供；
+- 作为子项目被引用且调用方已提供 oatpp target 时直接复用，跳过选择。
 
 ```bash
 mkdir -p build && cd build          # 或用 CLion 的 cmake-build-debug/
-cmake ..                            # 首次需联网拉取 oatpp 1.3.0 与 Catch2 v2.13.10
-cmake --build .                     # 测试可执行文件在 build/test/oatpp_meta_test
-./test/oatpp_meta_test              # 跑全部用例（默认全跑，无隐藏/必然失败用例）
+cmake ..                            # 默认 AUTO；Catch2 由 test/CMakeLists 在配置阶段拉取
+cmake --build .                     # AUTO/EXTERNAL 时，构建阶段会先联网下载并编译 oatpp
+./test/oatpp_meta_test              # 跑全部用例
 ./test/oatpp_meta_test "[null]"     # 按 tag 过滤；现有 tag：[traits] [null] [dto] [policy]
 ```
 
-注意：oatpp / Catch2 由 FetchContent 下载到各构建目录的 `_deps/`（已存在则不再联网）。
-根 `.gitignore` 只排除 `build/`，CLion 的 `cmake-build-debug/` 处于未跟踪状态。
+注意：`OATPP_MODULES_LOCATION` 取值非法、`INSTALLED` 找不到 oatpp、`CUSTOM` 缺目录/路径不对时，
+configure 会给出指引式报错。根 `.gitignore` 只排除 `build/`，CLion 的 `cmake-build-debug/`
+处于未跟踪状态。
 
 ## 编码约定与注意事项
 

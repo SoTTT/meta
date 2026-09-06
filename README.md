@@ -2,7 +2,8 @@
 
 纯头文件 **C++11** 模板元编程库（CMake target：`oatpp_meta`，`INTERFACE`），核心能力是在
 std 类型与 oatpp 包装类型（`oatpp::Vector<T>`、`oatpp::String`、`oatpp::Int32`、`DTOWrapper`
-等）之间做**类型层深解包 / 深包装与运行时转换**。唯一外部依赖为 oatpp 1.3.0。
+等）之间做**类型层深解包 / 深包装与运行时转换**。唯一外部依赖为 oatpp，其来源可在
+CMake 配置时选择（见「依赖的 oatpp 从哪来」）。
 
 - 单头文件：`src/meta.hpp`，命名空间 `oatpp::meta`
 - 注释与文档为中文；库本体刻意只用 C++11 特性（测试在 `-std=c++11` 下全绿）
@@ -103,16 +104,42 @@ struct traits<oatpp::Object<TestDto>> : dto_traits_base<TestDto, TestStruct> {
 }}
 ```
 
+## 依赖的 oatpp 从哪来
+
+本项目仿照官方 oatpp 组件（如 oatpp-swagger）的做法，在配置阶段用 `OATPP_MODULES_LOCATION`
+变量选择 oatpp 依赖的来源，取值如下：
+
+- `AUTO`（默认）：按顺序自动探测。本机已安装 oatpp 1.3.0 及以上就用它，否则回退到 `EXTERNAL`。
+- `INSTALLED`：使用 `find_package` 找到的已安装 oatpp（可另用 `oatpp_DIR` 指向自定义安装位置）。
+- `EXTERNAL`：在构建阶段从 GitHub 下载 oatpp 并本地编译。默认拉取 `origin/master`，
+  可用 `OATPP_GIT_TAG` 固定到某个版本或分支。
+- `CUSTOM`：使用本地已有的 oatpp 头文件与库。`OATPP_DIR_SRC` 指定含 oatpp 头文件的目录
+  （形如 `<oatpp 源码>/src`），`OATPP_DIR_LIB` 指定含 `liboatpp` 的目录。
+
+常用配置命令：
+
+```bash
+cmake ..                                                        # 默认 AUTO
+cmake -DOATPP_MODULES_LOCATION=EXTERNAL ..                      # 显式远程拉取并构建
+cmake -DOATPP_MODULES_LOCATION=EXTERNAL -DOATPP_GIT_TAG=1.3.0 ..  # 固定远程版本
+cmake -DOATPP_MODULES_LOCATION=CUSTOM \
+      -DOATPP_DIR_SRC=<oatpp 源码>/src -DOATPP_DIR_LIB=<oatpp 库目录> ..  # 本地源码/库
+```
+
+取值不合法、`INSTALLED` 找不到 oatpp、`CUSTOM` 缺少或填错目录时，配置会给出指引式报错。
+本项目作为子目录（`add_subdirectory`）被其他项目引用时，如果调用方已经提供了 oatpp 目标，
+会直接复用，不再查找或下载。
+
 ## 构建与测试
 
 ```bash
 mkdir -p build && cd build          # 或用 CLion 的 cmake-build-debug/
-cmake ..                            # 首次需联网：FetchContent 拉取 oatpp 1.3.0 与 Catch2 v2.13.10
+cmake ..                            # 默认 AUTO：本机无已安装 oatpp 时，构建阶段会联网拉取并编译
 cmake --build .                     # 测试可执行文件：build/test/oatpp_meta_test
 ./test/oatpp_meta_test              # 全部用例（当前 22 用例 / 120 断言全绿）
 ./test/oatpp_meta_test "[null]"     # 按 tag 过滤；现有 tag：[traits] [null] [dto] [policy]
 ```
 
 - 语言标准：C++11（`CMAKE_CXX_STANDARD 11`），oatpp / Catch2 亦以 C++11 编译。
-- 依赖仅 oatpp 1.3.0；作为库使用时只需引入 `src/meta.hpp`，并在使用方目标上链接 oatpp 1.3.0。
+- 作为库使用时只需引入 `src/meta.hpp`；库本体只依赖 oatpp，具体来源见上文。
 - 开发环境：macOS / Apple Clang。
