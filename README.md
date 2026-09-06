@@ -1,0 +1,118 @@
+# oatpp-meta
+
+纯头文件 **C++11** 模板元编程库（CMake target：`oatpp_meta`，`INTERFACE`），核心能力是在
+std 类型与 oatpp 包装类型（`oatpp::Vector<T>`、`oatpp::String`、`oatpp::Int32`、`DTOWrapper`
+等）之间做**类型层深解包 / 深包装与运行时转换**。唯一外部依赖为 oatpp 1.3.0。
+
+- 单头文件：`src/meta.hpp`，命名空间 `oatpp::meta`
+- 注释与文档为中文；库本体刻意只用 C++11 特性（测试在 `-std=c++11` 下全绿）
+
+## 核心接口：`oatpp::meta::traits<T>`
+
+按 oatpp 类型族提供全特化，每个特化暴露四个成员：
+
+| 成员 | 说明 |
+| --- | --- |
+| `WrapperType` | oatpp 包装类型自身 |
+| `UnwrapperType` | 深解包后的 std 目标类型（嵌套容器递归展开） |
+| `do_unwrapper(value, Policy)` | 运行时解包；Policy 决定标量 null 语义，沿递归逐层传递 |
+| `do_wrapper(value)` | 运行时反向包装，把 `UnwrapperType` 包装成 `WrapperType`；恒产生非 null 包装 |
+
+内置覆盖：
+
+- 非 oatpp 类型：按 **passthrough** 处理，原样穿透；
+- `oatpp::Int8...Float64` 等 `Primitive<T, Clazz>`：数值原语；
+- `oatpp::String` / `oatpp::Boolean` / `EnumObjectWrapper`：scalar 叶子；
+- 容器类型（`oatpp::Vector/List/UnorderedSet`、`PairList`、`UnorderedMap`）：元素与键值递归解包；
+- `oatpp::Void` / `oatpp::Any`：opaque，无法静态解包；
+- DTO（`oatpp::Object<T>`）：**用户定制点**（见下）。
+
+类型族标志由公共基类 `traits_base<type_category>` 派生：全部 `is_xxx` 常量由互斥的
+`type_category`（passthrough / primitive / scalar / container / object / opaque）自动导出，
+非法组合不可表达。
+
+### 用法示例
+
+```cpp
+#include <meta.hpp>
+#include <oatpp/core/Types.hpp>
+
+using oatpp::meta::traits;
+
+oatpp::String s("hello");
+std::string v = traits<oatpp::String>::do_unwrapper(s);          // "hello"
+
+auto vec = oatpp::Vector<oatpp::Int32>::createShared();
+vec->push_back(oatpp::Int32(1));
+vec->push_back(oatpp::Int32(2));
+std::vector<std::int32_t> r = traits<oatpp::Vector<oatpp::Int32>>::do_unwrapper(vec); // {1, 2}
+
+std::vector<std::int32_t> back = {7, 8};
+oatpp::Vector<oatpp::Int32> w = traits<oatpp::Vector<oatpp::Int32>>::do_wrapper(back); // 非 null 包装
+```
+
+## null 对象处理
+
+oatpp的对象本质上是带有运行时类型信息的指针，所以oatpp对象都是可空的，为了对空对象进行自定义处理，oatpp-meta为不同的类型提供了策略；
+
+1. 容器转换为空容器；
+2. 空标量类型的处理由**Policy**决定：
+   - 默认 `null_to_throw`：视为数据契约违反，抛 `null_unwrap_error`；
+   - 宽容需显式传 `null_to_default{}`：映射为默认值（会丢失 null 与零值的区分）；
+   - 自定义策略只需提供 `template<typename U> static U on_null_scalar()`；
+3. 值为null的DTO对象的处理由用户的自定义转换代码决定；
+
+```cpp
+oatpp::Int32 n;                                        // null 标量
+traits<oatpp::Int32>::do_unwrapper(n);                 // 抛 null_unwrap_error
+traits<oatpp::Int32>::do_unwrapper(n, oatpp::meta::null_to_default{}); // 0
+```
+
+### 按类型分派：`policy::combine`
+
+同一次解包中为不同类型的标量指定不同策略，按声明顺序**首个命中生效**：
+
+```cpp
+using my_policy = oatpp::meta::policy::combine<
+    oatpp::meta::policy::for_type<std::int32_t, oatpp::meta::null_to_default>,
+    oatpp::meta::policy::for_type<std::string, oatpp::meta::null_to_default>,
+    oatpp::meta::policy::otherwise<oatpp::meta::null_to_throw>
+>;
+
+auto result = traits<SomeOatppType>::do_unwrapper(value, my_policy{});
+```
+
+## DTO 定制点
+
+为了对DTO对象进行统一转换，oatpp-meta提供了定制点，用户可以通过继承辅助基类 `dto_traits_base<MyDto, MyStruct>`、特化`oatpp::meta::traits`并实现 `do_unwrapper`（及可选的 `do_wrapper`）为oatpp DTO提供支持，一个例子如下：
+
+```cpp
+namespace oatpp { namespace meta {
+template<>
+struct traits<oatpp::Object<TestDto>> : dto_traits_base<TestDto, TestStruct> {
+    template<typename Policy = null_to_throw>
+    static UnwrapperType do_unwrapper(oatpp::Object<TestDto> const &value, Policy const & = {}) {
+        TestStruct result{};
+        if (value) {
+            result.id = traits<oatpp::Int32>::do_unwrapper(value->id);
+            // ... 逐字段解包（null 语义由本特化作者决定）
+        }
+        return result;
+    }
+};
+}}
+```
+
+## 构建与测试
+
+```bash
+mkdir -p build && cd build          # 或用 CLion 的 cmake-build-debug/
+cmake ..                            # 首次需联网：FetchContent 拉取 oatpp 1.3.0 与 Catch2 v2.13.10
+cmake --build .                     # 测试可执行文件：build/test/oatpp_meta_test
+./test/oatpp_meta_test              # 全部用例（当前 22 用例 / 120 断言全绿）
+./test/oatpp_meta_test "[null]"     # 按 tag 过滤；现有 tag：[traits] [null] [dto] [policy]
+```
+
+- 语言标准：C++11（`CMAKE_CXX_STANDARD 11`），oatpp / Catch2 亦以 C++11 编译。
+- 依赖仅 oatpp 1.3.0；作为库使用时只需引入 `src/meta.hpp`，并在使用方目标上链接 oatpp 1.3.0。
+- 开发环境：macOS / Apple Clang。
