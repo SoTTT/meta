@@ -7,7 +7,7 @@ std 类型与 oatpp 包装类型（`oatpp::Vector<T>`、`oatpp::String`、`DTOWr
 **类型层深解包/深包装与运行时转换**。仅依赖 oatpp 1.3.0（通过 CMake FetchContent 拉取）。
 代码注释与提交信息为中文，保持一致。
 
-核心接口：`oatpp::meta::traits<T>`（`src/meta_operation.hpp`）——按 oatpp 类型族
+核心接口：`oatpp::meta::traits<T>`（`src/meta.hpp`）——按 oatpp 类型族
 提供模板特化，成员包括 `WrapperType` / `UnwrapperType` / `do_unwrapper` / `do_wrapper` /
 `type_category` 分类枚举（全部 `is_xxx` 标志由 `traits_base<C>` 基类派生）。
 DTO 的解包是**用户定制点**：对自己的 DTO 全特化 `traits`（继承 `dto_traits_base`）。
