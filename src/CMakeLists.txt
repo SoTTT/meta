@@ -1,25 +1,13 @@
 cmake_minimum_required(VERSION 3.16.9)
 
-add_library(meta_operation STATIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/md_operation.hpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/oatpp_helper.hpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/template_helper.hpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/traits.hpp)
+# 纯头文件库，必须使用 INTERFACE：
+# 之前声明为 STATIC 但没有 .cpp 源文件，ar 无法从空目标创建归档，导致构建失败
+add_library(meta_operation INTERFACE)
+
+target_sources(meta_operation INTERFACE
+        ${CMAKE_CURRENT_SOURCE_DIR}/oatpp_helper.hpp)
 
 include(FetchContent)
-
-# 声明 Abseil
-FetchContent_Declare(
-        abseil
-        GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
-        GIT_TAG 20240116.2  # 指定稳定版本
-)
-
-# 启用 C++ 标准传递
-set(ABSL_PROPAGATE_CXX_STD ON)
-
-# 下载并构建 Abseil
-FetchContent_MakeAvailable(abseil)
 
 FetchContent_Declare(
         oatpp
@@ -31,9 +19,6 @@ set(BUILD_TESTING OFF CACHE INTERNAL "")
 
 FetchContent_MakeAvailable(oatpp)
 
-target_include_directories(meta_operation PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(meta_operation INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(meta_operation PUBLIC
-        absl::base
-        absl::strings
-        oatpp)
+target_link_libraries(meta_operation INTERFACE oatpp)

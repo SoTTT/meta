@@ -5,254 +5,453 @@
 #ifndef OATPP_HELPER_HPP
 #define OATPP_HELPER_HPP
 
+#include <list>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
 #include <oatpp/core/Types.hpp>
-#include <absl/meta/type_traits.h>
 
-#include "template_helper.hpp"
+namespace oatpp {
+    namespace meta_operation {
+        // ------------------------------------------------------------------
+        // null 语义三层模型
+        //
+        // 1. 容器 null（Vector/List/... 本身为空）-> 空容器
+        //    库内建约定，不进入策略接口（null 数组与空数组的区分在业务上几乎总是
+        //    无意义；真正在乎这一区分的使用者应走 optional 映射，那是类型层的事）。
+        // 2. 标量 null（任意深度，含容器内的元素）-> 由 Policy 决定
+        //    默认 null_to_throw（fail-fast，逼迫调用方显式思考 null 语义）；
+        //    宽容语义必须显式写出：do_unwrapper(value, null_to_default{})。
+        //    自定义策略只需提供：template<typename U> U on_null_scalar() const。
+        // 3. 嵌套对象（DTO）-> 库结构性不插手
+        //    DTOWrapper 默认 static_assert（见文件末尾），逐字段的可空性与
+        //    null 处理由用户的 traits 特化全权负责；策略传播不穿越用户代码。
+        // ------------------------------------------------------------------
 
-namespace meta_operation {
-    namespace type_traits {
-        namespace oatpp {
-            template<typename T>
-            struct is_oatpp_void_pointer_wrapper : std::integral_constant<bool, std::is_same<T, ::oatpp::Void>::value> {
-            };
+        /**
+         * @brief 标量解包遇到 null 包装时抛出的异常
+         */
+        class null_unwrap_error : public std::runtime_error {
+        public:
+            explicit null_unwrap_error(char const *message) : std::runtime_error(message) {
+            }
+        };
 
-            template<typename T>
-            struct is_oatpp_any_wrapper : std::integral_constant<bool, std::is_same<T, ::oatpp::Any>::value> {
-            };
+        /**
+         * @brief 默认 null 策略：标量 null 视为数据契约违反，抛出 null_unwrap_error
+         */
+        struct null_to_throw {
+            template<typename U>
+            [[noreturn]] U on_null_scalar() const {
+                throw null_unwrap_error("unwrapping null oatpp scalar wrapper");
+            }
+        };
 
-            template<typename T, typename = void>
-            struct is_oatpp_wrapper : std::false_type {
-            };
+        /**
+         * @brief 宽容 null 策略：标量 null 映射为默认值构造的结果（0/空串/false），
+         *        会丢失 null 与零值的区分，需调用方显式传入
+         */
+        struct null_to_default {
+            template<typename U>
+            constexpr U on_null_scalar() const {
+                return U{};
+            }
+        };
 
-            template<typename T>
-            struct is_oatpp_wrapper<T,
-                        absl::enable_if_t<std::is_void<absl::void_t<typename T::ObjectType> >::value> >
-                    : std::is_base_of<::oatpp::ObjectWrapper<
-                            typename T::ObjectType,
-                            typename template_helper::get_last_arg_from_template<T>::type>,
-                        T> {
-            };
+        /**
+         * @brief 包装类型的互斥分类
+         */
+        enum class type_category {
+            passthrough, // 非 oatpp 类型，原样穿透
+            primitive, // Primitive<T, Clazz> 数值原语（Int8 ... Float64）
+            scalar, // 非算术单值叶子：String / Boolean / Enum
+            container, // 容器：Vector / List / UnorderedSet / PairList / UnorderedMap
+            object, // DTO 对象（用户定制点）
+            opaque // Void / Any：无法静态解包
+        };
 
-            template<>
-            struct is_oatpp_wrapper<::oatpp::String> : std::true_type {
-            };
+        /**
+         * @brief 所有 traits 特化的公共基类：只需指定互斥的 type_category，
+         *        全部 is_xxx 特征常量由此派生（非法组合不可表达）
+         * @tparam C 该类型的分类
+         */
+        template<type_category C>
+        struct traits_base {
+            static constexpr type_category category = C;
 
-            template<>
-            struct is_oatpp_wrapper<::oatpp::Any> : std::true_type {
-            };
+            static constexpr bool is_oatpp_type = C != type_category::passthrough;
 
-            template<>
-            struct is_oatpp_wrapper<::oatpp::Void> : std::true_type {
-            };
+            static constexpr bool is_primitive = C == type_category::primitive;
 
-            // template<typename T>
-            // struct is_oatpp_wrapper<T, std::enable_if_t<
-            //             absl::disjunction<
-            //                 is_oatpp_any_pointer_wrapper<T>,
-            //                 is_oatpp_void_pointer_wrapper<T>,
-            //                 std::is_same<T, ::oatpp::String>
-            //             >::value
-            //         > > : std::true_type {
-            // };
+            static constexpr bool is_scalar =
+                    C == type_category::primitive || C == type_category::scalar;
 
+            static constexpr bool is_container = C == type_category::container;
 
-            template<typename T, typename = void>
-            struct is_oatpp_primitive_wrapper : std::false_type {
-            };
+            static constexpr bool is_object = C == type_category::object;
 
-            template<typename T>
-            struct is_oatpp_primitive_wrapper<T, absl::enable_if_t<is_oatpp_wrapper<T>::value> >
-                    : absl::conjunction<std::is_same<::oatpp::data::mapping::type::Primitive<
-                                typename T::ObjectType,
-                                typename template_helper::get_last_arg_from_template<T>::type>,
-                            T>,
-                        absl::negation<is_oatpp_void_pointer_wrapper<T> >,
-                        absl::negation<is_oatpp_any_wrapper<T> > > {
-            };
+            static constexpr bool is_opaque = C == type_category::opaque;
+        };
 
-            template<>
-            struct is_oatpp_primitive_wrapper<::oatpp::String> : std::false_type {
-            };
+        /**
+         * @brief oatpp 包装类型特征的基础模板（默认分支：非包装类型原样穿透）
+         * @tparam T 待鉴别的类型
+         * @memberof WrapperType 包装类型自身
+         * @memberof UnwrapperType 解包装后的类型
+         * @memberof do_unwrapper 运行时解包装；null 语义见上方三层模型，Policy 沿递归传递
+         * @memberof do_wrapper 运行时包装（UnwrapperType -> WrapperType）；恒产生非 null 包装
+         */
+        template<typename T>
+        struct traits : traits_base<type_category::passthrough> {
+            using WrapperType = T;
 
-            template<>
-            struct is_oatpp_primitive_wrapper<::oatpp::Any> : std::false_type {
-            };
+            using UnwrapperType = T;
 
-            template<>
-            struct is_oatpp_primitive_wrapper<::oatpp::Void> : std::false_type {
-            };
-
-            template<typename T, typename = void>
-            struct is_oatpp_container_wrapper : std::false_type {
-            };
-
-            template<typename T>
-            struct is_oatpp_container_wrapper<T, absl::enable_if_t<
-                        is_oatpp_wrapper<T>::value &&
-                        !is_oatpp_primitive_wrapper<T>::value &&
-                        is_container<typename T::TemplateObjectType>::value> >
-                    : std::true_type {
-            };
-
-            template<typename T, typename = void>
-            struct is_oatpp_map_container_wrapper : std::false_type {
-            };
-
-            template<typename K, typename V>
-            struct is_oatpp_map_container_wrapper<::oatpp::UnorderedMap<K, V> > : std::true_type {
-            };
-
-
-            template<typename T, typename = void>
-            struct value_type_is_oatpp_container_wrapper : std::false_type {
-            };
-
-            template<typename T>
-            struct value_type_is_oatpp_container_wrapper<T, absl::enable_if_t<
-                        is_container<T>::value &&
-                        is_oatpp_container_wrapper<typename T::value_type>::value> >
-                    : std::true_type {
-            };
-
-
-            /**
-             * @brief 获取oatpp包装类型对应的原始类型，对于嵌套的容器包装类型，会递归地依次将每层容器包装类型替换为对应的原始类型,
-             * 对于非oatpp包装类型的类型，返回其自身
-             * @tparam T 待处理的类型
-             * @memberof type 解包装后的类型
-             */
-            template<typename T, typename = void>
-            struct unwrapper {
-                using type = T;
-            };
-
-            template<typename T>
-            struct unwrapper<T, absl::enable_if_t<
-                        is_oatpp_container_wrapper<T>::value &&
-                        !is_oatpp_map_container_wrapper<T>::value> > {
-                using type = typename template_helper::replace_type<
-                    typename T::TemplateObjectType,
-                    typename unwrapper<typename T::TemplateObjectType::value_type>::type
-                >::type;
-            };
-
-            template<typename T>
-            struct unwrapper<T, absl::enable_if_t<
-                        is_oatpp_wrapper<T>::value &&
-                        is_oatpp_primitive_wrapper<T>::value> > {
-                using type = typename T::ObjectType;
-            };
-
-            template<typename T>
-            struct unwrapper<T, absl::enable_if_t<
-                        is_oatpp_container_wrapper<T>::value
-                        && is_oatpp_map_container_wrapper<T>::value> > {
-                using type = typename template_helper::replace_type<
-                    typename T::TemplateObjectType,
-                    typename unwrapper<typename T::TemplateObjectType::key_type>::type,
-                    typename unwrapper<typename T::TemplateObjectType::mapped_type>::type
-                >::type;
-            };
-
-            template<>
-            struct unwrapper<::oatpp::String> {
-                using type = std::string;
-            };
-
-            namespace impl {
-                template<typename WrapperContainerType, typename UnwrapperContainerType, typename = void>
-                struct deep_unwrapper;
-
-
-                template<typename WrapperContainerType, typename UnwrapperContainerType>
-                struct deep_unwrapper<WrapperContainerType, UnwrapperContainerType,
-                            absl::enable_if_t<!is_oatpp_map_container_wrapper<WrapperContainerType>::value> > {
-                    static void do_unwrapper(WrapperContainerType const &wrapperContainer,
-                                             UnwrapperContainerType &unwrapperContainer, std::true_type) {
-                        unwrapperContainer.reserve(wrapperContainer->size());
-                        for (int i = 0; i < wrapperContainer->size(); ++i) {
-                            unwrapperContainer.push_back(wrapperContainer[i]);
-                        }
-                    }
-
-                    static void do_unwrapper(WrapperContainerType const &wrapperContainer,
-                                             UnwrapperContainerType &unwrapperContainer, std::false_type) {
-                        unwrapperContainer.resize(wrapperContainer->size());
-                        for (int i = 0; i < wrapperContainer->size(); ++i) {
-                            deep_unwrapper<
-                                absl::remove_cvref_t<decltype(wrapperContainer[i])>,
-                                absl::remove_cvref_t<decltype(unwrapperContainer[i])>
-                            >::do_unwrapper(wrapperContainer[i],
-                                            unwrapperContainer[i],
-                                            is_container_and_element_type_is_not_container<typename
-                                                UnwrapperContainerType::value_type>
-                                            {});
-                        }
-                    }
-                };
-
-                template<typename WrapperContainerType, typename UnwrapperContainerType>
-                struct deep_unwrapper<WrapperContainerType, UnwrapperContainerType,
-                            absl::enable_if_t<is_oatpp_map_container_wrapper<WrapperContainerType>::value> > {
-                    static void do_unwrapper(WrapperContainerType const &wrapperContainer,
-                                             UnwrapperContainerType &unwrapperContainer, std::false_type) {
-                        for (auto it = wrapperContainer->begin(); it != wrapperContainer->end(); ++it) {
-                            unwrapperContainer[it->first] =
-                                    typename unwrapper<absl::remove_cvref_t<decltype(it->second)> >::type{};
-                            deep_unwrapper<
-                                absl::remove_cvref_t<decltype(wrapperContainer[it->first])>,
-                                absl::remove_cvref_t<decltype(unwrapperContainer[it->first])>
-                            >::do_unwrapper(wrapperContainer[it->first], unwrapperContainer[it->first],
-                                            is_container_and_element_type_is_not_container<typename
-                                                UnwrapperContainerType::value_type>{});
-                        }
-                    }
-
-                    static void do_unwrapper(WrapperContainerType const &wrapperContainer,
-                                             UnwrapperContainerType &unwrapperContainer, std::true_type) {
-                        for (auto it = wrapperContainer->begin(); it != wrapperContainer->end(); ++it) {
-                            unwrapperContainer[it->first] = it->second;
-                        }
-                    }
-                };
+            template<typename Policy = null_to_throw>
+            static constexpr UnwrapperType do_unwrapper(T const &value, Policy const & = {}) {
+                return value;
             }
 
-            template<typename T>
-            auto deep_unwrapper(T const &container) -> typename unwrapper<T>::type {
-                typename unwrapper<T>::type unwrapperContainer;
-                impl::deep_unwrapper<T, typename unwrapper<T>::type>::do_unwrapper
-                (container, unwrapperContainer,
-                 is_container_and_element_type_is_not_container<typename unwrapper<
-                     T>::type>{});
-                return unwrapperContainer;
+            static constexpr WrapperType do_wrapper(UnwrapperType const &value) {
+                return value;
+            }
+        };
+
+        /**
+         * @brief oatpp 数值原语：Int8/UInt8 ... Int64/UInt64/Float32/Float64
+         *        （共 10 个 typedef，均为 Primitive<T, Clazz> 的实例）-> 对应算术类型
+         */
+        template<typename T, typename Clazz>
+        struct traits<data::mapping::type::Primitive<T, Clazz> > : traits_base<type_category::primitive> {
+            using WrapperType = data::mapping::type::Primitive<T, Clazz>;
+
+            using UnwrapperType = T;
+
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(data::mapping::type::Primitive<T, Clazz> const &value,
+                                              Policy const &policy = {}) {
+                if (value.get() == nullptr) {
+                    return policy.template on_null_scalar<UnwrapperType>();
+                }
+                return value.getValue(UnwrapperType{});
             }
 
-            template<typename T>
-            struct is_oatpp_container_wrapper_clazz : std::false_type {
-            };
+            static WrapperType do_wrapper(UnwrapperType const &value) {
+                return WrapperType(value);
+            }
+        };
 
-            template<typename T>
-            struct is_oatpp_container_wrapper_clazz<::oatpp::data::mapping::type::__class::Vector<T> >
-                    : std::true_type {
-            };
+        /**
+         * @brief oatpp::Void：无值语义，原样穿透
+         */
+        template<>
+        struct traits<Void> : traits_base<type_category::opaque> {
+            using WrapperType = Void;
 
-            template<typename T>
-            struct is_oatpp_container_wrapper_clazz<::oatpp::data::mapping::type::__class::List<T> >
-                    : std::true_type {
-            };
+            using UnwrapperType = Void;
 
-            template<typename T>
-            struct is_oatpp_container_wrapper_clazz<::oatpp::data::mapping::type::__class::UnorderedSet<T> >
-                    : std::true_type {
-            };
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(Void const &value, Policy const & = {}) {
+                return value;
+            }
 
-            template<typename K, typename V>
-            struct is_oatpp_container_wrapper_clazz<::oatpp::data::mapping::type::__class::UnorderedMap<K, V> >
-                    : std::true_type {
-            };
-        }
+            static WrapperType do_wrapper(Void const &value) {
+                return value;
+            }
+        };
+
+        /**
+         * @brief oatpp::Any：多态持有任意包装类型，无法静态解包，原样穿透
+         */
+        template<>
+        struct traits<Any> : traits_base<type_category::opaque> {
+            using WrapperType = Any;
+
+            using UnwrapperType = Any;
+
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(Any const &value, Policy const & = {}) {
+                return value;
+            }
+
+            static WrapperType do_wrapper(Any const &value) {
+                return value;
+            }
+        };
+
+        /**
+         * @brief oatpp::String -> std::string
+         */
+        template<>
+        struct traits<String> : traits_base<type_category::scalar> {
+            using WrapperType = String;
+
+            using UnwrapperType = std::string;
+
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(String const &value, Policy const &policy = {}) {
+                if (value.get() == nullptr) {
+                    return policy.template on_null_scalar<UnwrapperType>();
+                }
+                return *value.get();
+            }
+
+            static WrapperType do_wrapper(UnwrapperType const &value) {
+                return WrapperType(value);
+            }
+        };
+
+        /**
+         * @brief oatpp::Boolean -> bool
+         */
+        template<>
+        struct traits<Boolean> : traits_base<type_category::scalar> {
+            using WrapperType = Boolean;
+
+            using UnwrapperType = bool;
+
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(Boolean const &value, Policy const &policy = {}) {
+                if (value.get() == nullptr) {
+                    return policy.template on_null_scalar<UnwrapperType>();
+                }
+                return *value.get();
+            }
+
+            static WrapperType do_wrapper(UnwrapperType const &value) {
+                return WrapperType(value);
+            }
+        };
+
+        /**
+         * @brief oatpp 枚举包装：Enum<T> 及其 AsString/AsNumber/NotNull 变体
+         *        （均为 EnumObjectWrapper<T, Interpreter> 的实例）-> C++ 枚举类型 T 本身；
+         *        解释器只影响序列化表现，不改变解包后的值类型
+         */
+        template<typename T, typename Interpreter>
+        struct traits<data::mapping::type::EnumObjectWrapper<T, Interpreter> >
+                : traits_base<type_category::scalar> {
+            using WrapperType = data::mapping::type::EnumObjectWrapper<T, Interpreter>;
+
+            using UnwrapperType = T;
+
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(
+                data::mapping::type::EnumObjectWrapper<T, Interpreter> const &value,
+                Policy const &policy = {}) {
+                if (value.get() == nullptr) {
+                    return policy.template on_null_scalar<UnwrapperType>();
+                }
+                return *value.get();
+            }
+
+            static WrapperType do_wrapper(UnwrapperType const &value) {
+                return WrapperType(value);
+            }
+        };
+
+        /**
+         * @brief oatpp::Vector<T> -> std::vector<递归解包后的元素类型>
+         *        null 容器 -> 空 vector（内建约定）；null 元素 -> 由 Policy 决定
+         */
+        template<typename T>
+        struct traits<Vector<T> > : traits_base<type_category::container> {
+            using WrapperType = Vector<T>;
+
+            using UnwrapperType = std::vector<typename traits<T>::UnwrapperType>;
+
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(Vector<T> const &value, Policy const &policy = {}) {
+                UnwrapperType result;
+                if (value.get() == nullptr) {
+                    return result;
+                }
+                result.reserve(value->size());
+                for (auto const &element: *value.get()) {
+                    result.push_back(traits<T>::do_unwrapper(element, policy));
+                }
+                return result;
+            }
+
+            static WrapperType do_wrapper(UnwrapperType const &value) {
+                WrapperType result = WrapperType::createShared();
+                result->reserve(value.size());
+                for (auto const &element: value) {
+                    result->push_back(traits<T>::do_wrapper(element));
+                }
+                return result;
+            }
+        };
+
+        /**
+         * @brief oatpp::List<T> -> std::list<递归解包后的元素类型>
+         *        注意：std::list 无 reserve/operator[]，只能 push_back（历史缺陷 CF02）；
+         *        null 容器 -> 空 list（内建约定）
+         */
+        template<typename T>
+        struct traits<List<T> > : traits_base<type_category::container> {
+            using WrapperType = List<T>;
+
+            using UnwrapperType = std::list<typename traits<T>::UnwrapperType>;
+
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(List<T> const &value, Policy const &policy = {}) {
+                UnwrapperType result;
+                if (value.get() == nullptr) {
+                    return result;
+                }
+                for (auto const &element: *value.get()) {
+                    result.push_back(traits<T>::do_unwrapper(element, policy));
+                }
+                return result;
+            }
+
+            static WrapperType do_wrapper(UnwrapperType const &value) {
+                WrapperType result = WrapperType::createShared();
+                for (auto const &element: value) {
+                    result->push_back(traits<T>::do_wrapper(element));
+                }
+                return result;
+            }
+        };
+
+        /**
+         * @brief oatpp::UnorderedSet<T> -> std::unordered_set<递归解包后的元素类型>
+         *        注意：std::unordered_set 无 push_back，只能 insert（历史缺陷 CF03）；
+         *        null 容器 -> 空 set（内建约定）
+         */
+        template<typename T>
+        struct traits<UnorderedSet<T> > : traits_base<type_category::container> {
+            using WrapperType = UnorderedSet<T>;
+
+            using UnwrapperType = std::unordered_set<typename traits<T>::UnwrapperType>;
+
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(UnorderedSet<T> const &value, Policy const &policy = {}) {
+                UnwrapperType result;
+                if (value.get() == nullptr) {
+                    return result;
+                }
+                for (auto const &element: *value.get()) {
+                    result.insert(traits<T>::do_unwrapper(element, policy));
+                }
+                return result;
+            }
+
+            static WrapperType do_wrapper(UnwrapperType const &value) {
+                WrapperType result = WrapperType::createShared();
+                for (auto const &element: value) {
+                    result->insert(traits<T>::do_wrapper(element));
+                }
+                return result;
+            }
+        };
+
+        /**
+         * @brief oatpp::PairList<K, V>（即 DTO 中的 Fields）
+         *        -> std::list<std::pair<递归解包后的 K, 递归解包后的 V> >
+         *        注意：pair 的两个成员都递归解包（历史缺陷 CF06 的类型层问题）；
+         *        std::list 无 reserve，只能 emplace_back；null 容器 -> 空 list（内建约定）
+         */
+        template<typename K, typename V>
+        struct traits<PairList<K, V> > : traits_base<type_category::container> {
+            using WrapperType = PairList<K, V>;
+
+            using UnwrapperType = std::list<std::pair<
+                typename traits<K>::UnwrapperType,
+                typename traits<V>::UnwrapperType> >;
+
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(PairList<K, V> const &value, Policy const &policy = {}) {
+                UnwrapperType result;
+                if (value.get() == nullptr) {
+                    return result;
+                }
+                for (auto const &entry: *value.get()) {
+                    result.emplace_back(traits<K>::do_unwrapper(entry.first, policy),
+                                        traits<V>::do_unwrapper(entry.second, policy));
+                }
+                return result;
+            }
+
+            static WrapperType do_wrapper(UnwrapperType const &value) {
+                WrapperType result = WrapperType::createShared();
+                for (auto const &entry: value) {
+                    result->emplace_back(traits<K>::do_wrapper(entry.first),
+                                         traits<V>::do_wrapper(entry.second));
+                }
+                return result;
+            }
+        };
+
+        /**
+         * @brief oatpp::UnorderedMap<K, V>（即 DTO 中的 UnorderedFields）
+         *        -> std::unordered_map<递归解包后的 K, 递归解包后的 V>
+         *        key 与 value 均递归解包（历史缺陷 CF01 的类型层问题）；
+         *        null 容器 -> 空 map（内建约定）
+         */
+        template<typename K, typename V>
+        struct traits<UnorderedMap<K, V> > : traits_base<type_category::container> {
+            using WrapperType = UnorderedMap<K, V>;
+
+            using UnwrapperType = std::unordered_map<
+                typename traits<K>::UnwrapperType,
+                typename traits<V>::UnwrapperType>;
+
+            template<typename Policy = null_to_throw>
+            static UnwrapperType do_unwrapper(UnorderedMap<K, V> const &value, Policy const &policy = {}) {
+                UnwrapperType result;
+                if (value.get() == nullptr) {
+                    return result;
+                }
+                for (auto const &entry: *value.get()) {
+                    result.emplace(traits<K>::do_unwrapper(entry.first, policy),
+                                   traits<V>::do_unwrapper(entry.second, policy));
+                }
+                return result;
+            }
+
+            static WrapperType do_wrapper(UnwrapperType const &value) {
+                WrapperType result = WrapperType::createShared();
+                for (auto const &entry: value) {
+                    result->emplace(traits<K>::do_wrapper(entry.first),
+                                    traits<V>::do_wrapper(entry.second));
+                }
+                return result;
+            }
+        };
+
+        /**
+         * @brief DTO 定制点的辅助基类：用户全特化 traits<DTOWrapper<MyDto>> 时继承它，
+         *        只需再提供 do_unwrapper（WrapperType/UnwrapperType/category 已填好）；
+         *        如需反向包装（StructT -> DTO），再自行提供 do_wrapper 即可。
+         *        DTO 内部逐字段的 null 语义由特化作者全权负责（策略不穿越用户代码）
+         * @tparam Dto 用户的 DTO 类型
+         * @tparam StructT 用户自定义的解包目标类型（长什么样完全由用户决定）
+         */
+        template<typename Dto, typename StructT>
+        struct dto_traits_base : traits_base<type_category::object> {
+            using WrapperType = data::mapping::type::DTOWrapper<Dto>;
+
+            using UnwrapperType = StructT;
+        };
+
+        /**
+         * @brief DTOWrapper<T> 默认没有解包目标类型，给出编译期诊断（ISSUE-DTO 修复方向 a）。
+         *        用户对自己的 DTO 写 traits 的全特化（建议继承 dto_traits_base）即可覆盖本诊断；
+         *        全特化后 Vector<Object<Dto>> 等嵌套容器的解包自动可用。
+         */
+        template<typename T>
+        struct traits<data::mapping::type::DTOWrapper<T> > {
+            static_assert(sizeof(T) != sizeof(T),
+                          "traits<DTOWrapper<T>>: DTO 无默认解包目标类型，"
+                          "请为你的 DTO 全特化 oatpp::meta_operation::traits（可继承 dto_traits_base）");
+        };
     }
 }
 
