@@ -1,5 +1,5 @@
-#ifndef META_OPERATION_HPP
-#define META_OPERATION_HPP
+#ifndef OATPP_META_HPP
+#define OATPP_META_HPP
 
 #include <list>
 #include <stdexcept>
@@ -78,6 +78,41 @@ namespace oatpp {
             namespace detail {
                 template<typename>
                 struct always_false : std::false_type {};
+
+                /**
+                 * @brief 递归遍历条目，选中第一个 matches<U> 为真的条目执行；
+                 *        列表耗尽（无匹配）时给出编译期诊断。
+                 */
+                template<typename U, typename... Entries>
+                struct first_match;
+
+                template<typename U>
+                struct first_match<U> {
+                    static U on_null_scalar() {
+                        static_assert(detail::always_false<U>::value,
+                                      "policy::combine: no matching entry for type U "
+                                      "(did you forget to add policy::otherwise<...>?)");
+                    }
+                };
+
+                template<typename U, typename First, typename... Rest>
+                struct first_match<U, First, Rest...> {
+                    static U on_null_scalar() {
+                        // matches<U> 派生自 std::true_type / std::false_type；
+                        // 用 tag dispatch 实现编译期分支（库按 C++11 编写，不用 if constexpr）
+                        typedef typename First::template matches<U>::type matched;
+                        return dispatch(matched());
+                    }
+
+                private:
+                    static U dispatch(std::true_type) {
+                        return First::template on_null_scalar<U>();
+                    }
+
+                    static U dispatch(std::false_type) {
+                        return first_match<U, Rest...>::on_null_scalar();
+                    }
+                };
             }
 
             /**
@@ -86,7 +121,7 @@ namespace oatpp {
             template<typename T, typename P>
             struct for_type {
                 template<typename U>
-                static constexpr bool matches = std::is_same_v<U, T>;
+                struct matches : std::is_same<U, T> {};
 
                 template<typename U>
                 static U on_null_scalar() {
@@ -100,7 +135,7 @@ namespace oatpp {
             template<typename P>
             struct otherwise {
                 template<typename U>
-                static constexpr bool matches = true;
+                struct matches : std::true_type {};
 
                 template<typename U>
                 static U on_null_scalar() {
@@ -115,24 +150,7 @@ namespace oatpp {
             struct combine {
                 template<typename U>
                 static U on_null_scalar() {
-                    return find<U, Entries...>();
-                }
-
-            private:
-                template<typename U>
-                static U find() {
-                    static_assert(detail::always_false<U>::value,
-                                  "policy::combine: no matching entry for type U "
-                                  "(did you forget to add policy::otherwise<...>?)");
-                }
-
-                template<typename U, typename First, typename... Rest>
-                static U find() {
-                    if constexpr (First::template matches<U>) {
-                        return First::template on_null_scalar<U>();
-                    } else {
-                        return find<U, Rest...>();
-                    }
+                    return detail::first_match<U, Entries...>::on_null_scalar();
                 }
             };
         }
@@ -533,4 +551,4 @@ namespace oatpp {
     }
 }
 
-#endif //META_OPERATION_HPP
+#endif //OATPP_META_HPP

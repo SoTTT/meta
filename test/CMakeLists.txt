@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16.9)
 
-add_executable(meta_operation_test
+add_executable(oatpp_meta_test
         test.cpp)
 
 include(FetchContent)
@@ -13,7 +13,7 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(Catch2)
 
-target_link_libraries(meta_operation_test PRIVATE Catch2::Catch2 meta_operation)
+target_link_libraries(oatpp_meta_test PRIVATE Catch2::Catch2 oatpp_meta)
 
 # ---------------------------------------------------------------------------
 # 预期编译失败的缺陷探针（test/compile_fail/，详见该目录 README.md）
@@ -28,6 +28,6 @@ if (META_BUILD_COMPILE_FAIL_PROBES)
     foreach (probe ${COMPILE_FAIL_PROBES})
         get_filename_component(probe_name ${probe} NAME_WE)
         add_executable(${probe_name} EXCLUDE_FROM_ALL ${probe})
-        target_link_libraries(${probe_name} PRIVATE meta_operation)
+        target_link_libraries(${probe_name} PRIVATE oatpp_meta)
     endforeach ()
 endif ()
