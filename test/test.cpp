@@ -26,7 +26,7 @@ struct TestStruct {
 };
 
 namespace oatpp {
-namespace meta_operation {
+namespace meta {
 
 template<>
 struct traits<oatpp::Object<TestDto>> : dto_traits_base<TestDto, TestStruct> {
@@ -56,7 +56,7 @@ struct traits<oatpp::Object<TestDto>> : dto_traits_base<TestDto, TestStruct> {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("type_category classification", "[traits]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     // passthrough
     STATIC_REQUIRE(traits<int>::category == type_category::passthrough);
@@ -99,7 +99,7 @@ TEST_CASE("type_category classification", "[traits]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("WrapperType and UnwrapperType", "[traits]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     // passthrough
     STATIC_REQUIRE((std::is_same<traits<int>::WrapperType, int>::value));
@@ -143,7 +143,7 @@ TEST_CASE("WrapperType and UnwrapperType", "[traits]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("scalar unwrapper — non-null values", "[traits]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     auto i32 = oatpp::Int32(42);
     REQUIRE(traits<oatpp::Int32>::do_unwrapper(i32) == 42);
@@ -163,7 +163,7 @@ TEST_CASE("scalar unwrapper — non-null values", "[traits]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("null scalar — default policy throws", "[traits][null]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     oatpp::Int32 null_int;
     REQUIRE_THROWS_AS(traits<oatpp::Int32>::do_unwrapper(null_int), null_unwrap_error);
@@ -176,7 +176,7 @@ TEST_CASE("null scalar — default policy throws", "[traits][null]") {
 }
 
 TEST_CASE("null scalar — null_to_default policy", "[traits][null]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     oatpp::Int32 null_int;
     REQUIRE(traits<oatpp::Int32>::do_unwrapper(null_int, null_to_default{}) == 0);
@@ -196,7 +196,7 @@ TEST_CASE("null scalar — null_to_default policy", "[traits][null]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("container unwrapper — non-null", "[traits]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     // Vector
     auto vec = oatpp::Vector<oatpp::Int32>::createShared();
@@ -246,7 +246,7 @@ TEST_CASE("container unwrapper — non-null", "[traits]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("null container -> empty container", "[traits][null]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     oatpp::Vector<oatpp::Int32> null_vec;
     REQUIRE(traits<oatpp::Vector<oatpp::Int32>>::do_unwrapper(null_vec).empty());
@@ -269,7 +269,7 @@ TEST_CASE("null container -> empty container", "[traits][null]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("nested containers", "[traits]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     // Vector<Vector<Int32>>
     auto vv = oatpp::Vector<oatpp::Vector<oatpp::Int32>>::createShared();
@@ -307,7 +307,7 @@ TEST_CASE("nested containers", "[traits]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("container with null elements — default policy throws", "[traits][null]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     auto vec = oatpp::Vector<oatpp::Int32>::createShared();
     vec->push_back(oatpp::Int32(1));
@@ -318,7 +318,7 @@ TEST_CASE("container with null elements — default policy throws", "[traits][nu
 }
 
 TEST_CASE("container with null elements — null_to_default policy", "[traits][null]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     auto vec = oatpp::Vector<oatpp::Int32>::createShared();
     vec->push_back(oatpp::Int32(1));
@@ -334,7 +334,7 @@ TEST_CASE("container with null elements — null_to_default policy", "[traits][n
 // ---------------------------------------------------------------------------
 
 TEST_CASE("do_wrapper — scalars", "[traits]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     auto i32 = traits<oatpp::Int32>::do_wrapper(42);
     REQUIRE(traits<oatpp::Int32>::do_unwrapper(i32) == 42);
@@ -351,7 +351,7 @@ TEST_CASE("do_wrapper — scalars", "[traits]") {
 }
 
 TEST_CASE("do_wrapper — containers", "[traits]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     // Vector
     auto vec = traits<oatpp::Vector<oatpp::Int32>>::do_wrapper(std::vector<int32_t>{7, 8, 9});
@@ -377,7 +377,7 @@ TEST_CASE("do_wrapper — containers", "[traits]") {
 }
 
 TEST_CASE("do_wrapper — nested containers", "[traits]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     std::vector<std::vector<int32_t>> vv{{1, 2}, {3}};
     auto wrapped = traits<oatpp::Vector<oatpp::Vector<oatpp::Int32>>>::do_wrapper(vv);
@@ -395,7 +395,7 @@ TEST_CASE("do_wrapper — nested containers", "[traits]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("DTO custom traits — unwrapper", "[traits][dto]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     auto dto = TestDto::createShared();
     dto->id = 42;
@@ -407,7 +407,7 @@ TEST_CASE("DTO custom traits — unwrapper", "[traits][dto]") {
 }
 
 TEST_CASE("DTO custom traits — wrapper", "[traits][dto]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     TestStruct s{42, "alice"};
     auto dto = traits<oatpp::Object<TestDto>>::do_wrapper(s);
@@ -416,7 +416,7 @@ TEST_CASE("DTO custom traits — wrapper", "[traits][dto]") {
 }
 
 TEST_CASE("DTO in container", "[traits][dto]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     auto vec = oatpp::Vector<oatpp::Object<TestDto>>::createShared();
     {
@@ -445,7 +445,7 @@ TEST_CASE("DTO in container", "[traits][dto]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("passthrough types", "[traits]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     int x = 123;
     REQUIRE(traits<int>::do_unwrapper(x) == 123);
@@ -457,7 +457,7 @@ TEST_CASE("passthrough types", "[traits]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("opaque types — passthrough", "[traits]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     oatpp::Void v;
     REQUIRE_NOTHROW(traits<oatpp::Void>::do_unwrapper(v));
@@ -471,7 +471,7 @@ TEST_CASE("opaque types — passthrough", "[traits]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("policy::combine — per-type null policy", "[traits][null][policy]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     // Int32 null -> default, String null -> throw
     {
@@ -503,7 +503,7 @@ TEST_CASE("policy::combine — per-type null policy", "[traits][null][policy]") 
 }
 
 TEST_CASE("policy::combine — in container recursion", "[traits][null][policy]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     // PairList<String, Int32>: String null -> default (empty), Int32 null -> throw
     using strict_int32_default_string = policy::combine<
@@ -545,7 +545,7 @@ TEST_CASE("policy::combine — in container recursion", "[traits][null][policy]"
 }
 
 TEST_CASE("policy::combine — otherwise catches all", "[traits][null][policy]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     using fallback_default = policy::combine<
         policy::otherwise<null_to_default>
@@ -561,7 +561,7 @@ TEST_CASE("policy::combine — otherwise catches all", "[traits][null][policy]")
 }
 
 TEST_CASE("policy::combine — order matters (first match wins)", "[traits][null][policy]") {
-    using namespace oatpp::meta_operation;
+    using namespace oatpp::meta;
 
     // 先放 otherwise 再放 for_type：for_type 永远不会被匹配到
     using wrong_order = policy::combine<

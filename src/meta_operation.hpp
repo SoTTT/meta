@@ -14,7 +14,7 @@
 #include <oatpp/core/Types.hpp>
 
 namespace oatpp {
-    namespace meta_operation {
+    namespace meta {
         // ------------------------------------------------------------------
         // null 语义三层模型
         //
@@ -528,7 +528,7 @@ namespace oatpp {
         struct traits<data::mapping::type::DTOWrapper<T> > {
             static_assert(sizeof(T) != sizeof(T),
                           "traits<DTOWrapper<T>>: DTO 无默认解包目标类型，"
-                          "请为你的 DTO 全特化 oatpp::meta_operation::traits（可继承 dto_traits_base）");
+                          "请为你的 DTO 全特化 oatpp::meta::traits（可继承 dto_traits_base）");
         };
     }
 }

@@ -7,7 +7,7 @@ std 类型与 oatpp 包装类型（`oatpp::Vector<T>`、`oatpp::String`、`DTOWr
 **类型层深解包/深包装与运行时转换**。仅依赖 oatpp 1.3.0（通过 CMake FetchContent 拉取）。
 代码注释与提交信息为中文，保持一致。
 
-核心接口：`oatpp::meta_operation::traits<T>`（`src/oatpp_helper.hpp`）——按 oatpp 类型族
+核心接口：`oatpp::meta::traits<T>`（`src/meta_operation.hpp`）——按 oatpp 类型族
 提供模板特化，成员包括 `WrapperType` / `UnwrapperType` / `do_unwrapper` / `do_wrapper` /
 `type_category` 分类枚举（全部 `is_xxx` 标志由 `traits_base<C>` 基类派生）。
 DTO 的解包是**用户定制点**：对自己的 DTO 全特化 `traits`（继承 `dto_traits_base`）。
@@ -23,7 +23,7 @@ null 语义为三层模型：容器 null → 空容器（内建）；标量 null
   - `compile_fail/` — **预期编译失败的探针**，每个文件对应一个已实证缺陷
 - ⚠️ 测试套件（test.cpp / expose_issues.cpp / cf01~cf06 探针）大多仍基于已重构掉的旧接口
   （`meta_operation::type_traits::oatpp::unwrapper` 等），**当前无法编译，待迁移到
-  `oatpp::meta_operation::traits` 新接口**；cf04_dto.cpp 已迁移，可作为迁移样板。
+  `oatpp::meta::traits` 新接口**；cf04_dto.cpp 已迁移，可作为迁移样板。
 
 历史：`traits.hpp` / `template_helper.hpp` / `md_operation.hpp` / `benchmark/` 已于
 重构中移除（多维容器操作产品线砍除，Abseil 依赖随之解除），git 历史中可查。
