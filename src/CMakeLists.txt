@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.16.9)
 add_library(meta_operation INTERFACE)
 
 target_sources(meta_operation INTERFACE
-        ${CMAKE_CURRENT_SOURCE_DIR}/oatpp_helper.hpp)
+        ${CMAKE_CURRENT_SOURCE_DIR}/meta_operation.hpp)
 
 include(FetchContent)
 

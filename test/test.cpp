@@ -2,7 +2,7 @@
 #include <catch2/catch.hpp>
 
 #include <cstdint>
-#include <oatpp_helper.hpp>
+#include <meta_operation.hpp>
 #include <oatpp/core/macro/codegen.hpp>
 
 // ---------------------------------------------------------------------------
@@ -464,4 +464,112 @@ TEST_CASE("opaque types — passthrough", "[traits]") {
 
     oatpp::Any a;
     REQUIRE_NOTHROW(traits<oatpp::Any>::do_unwrapper(a));
+}
+
+// ---------------------------------------------------------------------------
+// 13. 声明式类型分派策略组合器 (policy::combine)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("policy::combine — per-type null policy", "[traits][null][policy]") {
+    using namespace oatpp::meta_operation;
+
+    // Int32 null -> default, String null -> throw
+    {
+        oatpp::Int32 null_i32;
+        oatpp::String null_str;
+
+        using mixed = policy::combine<
+            policy::for_type<std::int32_t, null_to_default>,
+            policy::otherwise<null_to_throw>
+        >;
+
+        REQUIRE(traits<oatpp::Int32>::do_unwrapper(null_i32, mixed{}) == 0);
+        REQUIRE_THROWS_AS(traits<oatpp::String>::do_unwrapper(null_str, mixed{}), null_unwrap_error);
+    }
+
+    // String null -> default, 其余抛异常
+    {
+        oatpp::Int32 null_i32;
+        oatpp::String null_str;
+
+        using mixed = policy::combine<
+            policy::for_type<std::string, null_to_default>,
+            policy::otherwise<null_to_throw>
+        >;
+
+        REQUIRE_THROWS_AS(traits<oatpp::Int32>::do_unwrapper(null_i32, mixed{}), null_unwrap_error);
+        REQUIRE(traits<oatpp::String>::do_unwrapper(null_str, mixed{}).empty());
+    }
+}
+
+TEST_CASE("policy::combine — in container recursion", "[traits][null][policy]") {
+    using namespace oatpp::meta_operation;
+
+    // PairList<String, Int32>: String null -> default (empty), Int32 null -> throw
+    using strict_int32_default_string = policy::combine<
+        policy::for_type<std::int32_t, null_to_throw>,
+        policy::for_type<std::string, null_to_default>,
+        policy::otherwise<null_to_throw>
+    >;
+
+    // key 正常，value null -> throw
+    {
+        auto pl = oatpp::PairList<oatpp::String, oatpp::Int32>::createShared();
+        pl->emplace_back(oatpp::String("ok"), oatpp::Int32()); // null Int32
+        REQUIRE_THROWS_AS(
+            (traits<oatpp::PairList<oatpp::String, oatpp::Int32>>::do_unwrapper(
+                pl, strict_int32_default_string{})),
+            null_unwrap_error);
+    }
+
+    // key null -> default (empty), value 正常
+    {
+        auto pl = oatpp::PairList<oatpp::String, oatpp::Int32>::createShared();
+        pl->emplace_back(oatpp::String(), oatpp::Int32(42)); // null String
+        auto result = traits<oatpp::PairList<oatpp::String, oatpp::Int32>>::do_unwrapper(
+            pl, strict_int32_default_string{});
+        REQUIRE(result.size() == 1);
+        REQUIRE(result.front().first.empty());
+        REQUIRE(result.front().second == 42);
+    }
+
+    // 混合：key null (default), value null (throw)
+    {
+        auto pl = oatpp::PairList<oatpp::String, oatpp::Int32>::createShared();
+        pl->emplace_back(oatpp::String(), oatpp::Int32()); // 两者都 null
+        REQUIRE_THROWS_AS(
+            (traits<oatpp::PairList<oatpp::String, oatpp::Int32>>::do_unwrapper(
+                pl, strict_int32_default_string{})),
+            null_unwrap_error);
+    }
+}
+
+TEST_CASE("policy::combine — otherwise catches all", "[traits][null][policy]") {
+    using namespace oatpp::meta_operation;
+
+    using fallback_default = policy::combine<
+        policy::otherwise<null_to_default>
+    >;
+
+    oatpp::Int32 null_i32;
+    oatpp::String null_str;
+    oatpp::Boolean null_bool;
+
+    REQUIRE(traits<oatpp::Int32>::do_unwrapper(null_i32, fallback_default{}) == 0);
+    REQUIRE(traits<oatpp::String>::do_unwrapper(null_str, fallback_default{}).empty());
+    REQUIRE(traits<oatpp::Boolean>::do_unwrapper(null_bool, fallback_default{}) == false);
+}
+
+TEST_CASE("policy::combine — order matters (first match wins)", "[traits][null][policy]") {
+    using namespace oatpp::meta_operation;
+
+    // 先放 otherwise 再放 for_type：for_type 永远不会被匹配到
+    using wrong_order = policy::combine<
+        policy::otherwise<null_to_default>,
+        policy::for_type<std::int32_t, null_to_throw>
+    >;
+
+    oatpp::Int32 null_i32;
+    // 因为 otherwise 在前面先匹配，Int32 也走 default
+    REQUIRE(traits<oatpp::Int32>::do_unwrapper(null_i32, wrong_order{}) == 0);
 }

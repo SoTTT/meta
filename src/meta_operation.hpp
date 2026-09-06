@@ -1,18 +1,15 @@
-//
-// Created by H1773 on 25-6-7.
-//
-
-#ifndef OATPP_HELPER_HPP
-#define OATPP_HELPER_HPP
+#ifndef META_OPERATION_HPP
+#define META_OPERATION_HPP
 
 #include <list>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include <type_traits>
 
 #include <oatpp/core/Types.hpp>
 
@@ -27,7 +24,7 @@ namespace oatpp {
         // 2. 标量 null（任意深度，含容器内的元素）-> 由 Policy 决定
         //    默认 null_to_throw（fail-fast，逼迫调用方显式思考 null 语义）；
         //    宽容语义必须显式写出：do_unwrapper(value, null_to_default{})。
-        //    自定义策略只需提供：template<typename U> U on_null_scalar() const。
+        //    自定义策略只需提供：template<typename U> static U on_null_scalar()。
         // 3. 嵌套对象（DTO）-> 库结构性不插手
         //    DTOWrapper 默认 static_assert（见文件末尾），逐字段的可空性与
         //    null 处理由用户的 traits 特化全权负责；策略传播不穿越用户代码。
@@ -47,7 +44,7 @@ namespace oatpp {
          */
         struct null_to_throw {
             template<typename U>
-            [[noreturn]] U on_null_scalar() const {
+            [[noreturn]] static U on_null_scalar() {
                 throw null_unwrap_error("unwrapping null oatpp scalar wrapper");
             }
         };
@@ -58,10 +55,91 @@ namespace oatpp {
          */
         struct null_to_default {
             template<typename U>
-            constexpr U on_null_scalar() const {
+            constexpr static U on_null_scalar() {
                 return U{};
             }
         };
+
+        // ------------------------------------------------------------------
+        // 声明式类型分派策略组合器
+        //
+        // 允许在同一次解包调用中，为不同类型的标量指定不同的 null 处理策略。
+        //
+        // 示例：
+        //   using my_policy = policy::combine<
+        //       policy::for_type<std::int32_t, null_to_default>,
+        //       policy::for_type<std::string, null_to_default>,
+        //       policy::otherwise<null_to_throw>
+        //   >;
+        //   auto result = traits<...>::do_unwrapper(value, my_policy{});
+        // ------------------------------------------------------------------
+
+        namespace policy {
+            namespace detail {
+                template<typename>
+                struct always_false : std::false_type {};
+            }
+
+            /**
+             * @brief 为特定解包后类型 T 绑定策略 P
+             */
+            template<typename T, typename P>
+            struct for_type {
+                template<typename U>
+                static constexpr bool matches = std::is_same_v<U, T>;
+
+                template<typename U>
+                static U on_null_scalar() {
+                    return P::template on_null_scalar<U>();
+                }
+            };
+
+            /**
+             * @brief 兜底条目：匹配任何未被前面条目覆盖的类型
+             */
+            template<typename P>
+            struct otherwise {
+                template<typename U>
+                static constexpr bool matches = true;
+
+                template<typename U>
+                static U on_null_scalar() {
+                    return P::template on_null_scalar<U>();
+                }
+            };
+
+            /**
+             * @brief 组合多个策略条目，按声明顺序匹配第一个满足条件的条目
+             */
+            template<typename... Entries>
+            struct combine {
+                template<typename U>
+                static U on_null_scalar() {
+                    return find<U, Entries...>();
+                }
+
+            private:
+                template<typename U>
+                static U find() {
+                    static_assert(detail::always_false<U>::value,
+                                  "policy::combine: no matching entry for type U "
+                                  "(did you forget to add policy::otherwise<...>?)");
+                }
+
+                template<typename U, typename First, typename... Rest>
+                static U find() {
+                    if constexpr (First::template matches<U>) {
+                        return First::template on_null_scalar<U>();
+                    } else {
+                        return find<U, Rest...>();
+                    }
+                }
+            };
+        }
+
+        /**
+         * @brief 包装类型的互斥分类
+         */
 
         /**
          * @brief 包装类型的互斥分类
@@ -455,4 +533,4 @@ namespace oatpp {
     }
 }
 
-#endif //OATPP_HELPER_HPP
+#endif //META_OPERATION_HPP
