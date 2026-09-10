@@ -30,6 +30,20 @@ namespace oatpp {
         //    null 处理由用户的 traits 特化全权负责；策略传播不穿越用户代码。
         // ------------------------------------------------------------------
 
+        // ------------------------------------------------------------------
+        // 递归控制：deep（默认）与 shallow
+        //
+        // traits<T, Recursion> 的第二参数选择容器元素/键值的处理方式：
+        //   - recursion::deep（默认）：元素/键值递归解包；
+        //   - recursion::shallow：只转换最外层容器，元素保持 oatpp 包装类型，
+        //     不实例化 traits<Elem>（容器装 DTO 无需为其写特化）。
+        //
+        // 浅模式：元素（含 null）原样保留，不进入 Policy；null 容器仍 -> 空容器，
+        // 容器内的 null 子容器保持 null；叶子类型无递归，shallow 等价 deep。
+        //
+        // 别名：shallow_traits<T> == traits<T, recursion::shallow>。
+        // ------------------------------------------------------------------
+
         /**
          * @brief 标量解包遇到 null 包装时抛出的异常
          */
@@ -156,6 +170,23 @@ namespace oatpp {
         }
 
         /**
+         * @brief 递归模式标签：选择容器元素/键值是继续深解包还是原样保留
+         */
+        namespace recursion {
+            /**
+             * @brief 深度递归（默认）：容器元素/键值递归解包到 std 类型
+             */
+            struct deep {
+            };
+
+            /**
+             * @brief 浅递归：只转换最外层容器，元素保持 oatpp 包装类型，不再深入
+             */
+            struct shallow {
+            };
+        }
+
+        /**
          * @brief 包装类型的互斥分类
          */
 
@@ -197,12 +228,13 @@ namespace oatpp {
         /**
          * @brief oatpp 包装类型特征的基础模板（默认分支：非包装类型原样穿透）
          * @tparam T 待鉴别的类型
+         * @tparam Recursion 容器元素的递归模式（recursion::deep / recursion::shallow）
          * @memberof WrapperType 包装类型自身
          * @memberof UnwrapperType 解包装后的类型
          * @memberof do_unwrapper 运行时解包装；null 语义见上方三层模型，Policy 沿递归传递
          * @memberof do_wrapper 运行时包装（UnwrapperType -> WrapperType）；恒产生非 null 包装
          */
-        template<typename T>
+        template<typename T, typename Recursion = recursion::deep>
         struct traits : traits_base<type_category::passthrough> {
             using WrapperType = T;
 
@@ -218,12 +250,50 @@ namespace oatpp {
             }
         };
 
+        namespace detail {
+            /**
+             * @brief 容器元素算子：deep 委派 traits<E>，shallow 原样拷贝。
+             */
+            template<typename E, typename Recursion>
+            struct element_ops {
+                using UnwrappedType = typename traits<E>::UnwrapperType;
+
+                template<typename Policy>
+                static UnwrappedType unwrap(E const &element, Policy const &policy) {
+                    return traits<E>::do_unwrapper(element, policy);
+                }
+
+                template<typename U>
+                static E wrap(U const &value) {
+                    return traits<E>::do_wrapper(value);
+                }
+            };
+
+            /**
+             * @brief 浅递归：元素原样保留，不进入 Policy
+             */
+            template<typename E>
+            struct element_ops<E, recursion::shallow> {
+                using UnwrappedType = E;
+
+                template<typename Policy>
+                static E unwrap(E const &element, Policy const &) {
+                    return element;
+                }
+
+                static E wrap(E const &value) {
+                    return value;
+                }
+            };
+        }
+
         /**
          * @brief oatpp 数值原语：Int8/UInt8 ... Int64/UInt64/Float32/Float64
          *        （共 10 个 typedef，均为 Primitive<T, Clazz> 的实例）-> 对应算术类型
          */
-        template<typename T, typename Clazz>
-        struct traits<data::mapping::type::Primitive<T, Clazz> > : traits_base<type_category::primitive> {
+        template<typename T, typename Clazz, typename Recursion>
+        struct traits<data::mapping::type::Primitive<T, Clazz>, Recursion>
+                : traits_base<type_category::primitive> {
             using WrapperType = data::mapping::type::Primitive<T, Clazz>;
 
             using UnwrapperType = T;
@@ -243,10 +313,10 @@ namespace oatpp {
         };
 
         /**
-         * @brief oatpp::Void：无值语义，原样穿透
+         * @brief oatpp::Void：无值语义，原样穿透（叶子无递归，shallow 等价 deep）
          */
-        template<>
-        struct traits<Void> : traits_base<type_category::opaque> {
+        template<typename Recursion>
+        struct traits<Void, Recursion> : traits_base<type_category::opaque> {
             using WrapperType = Void;
 
             using UnwrapperType = Void;
@@ -263,9 +333,10 @@ namespace oatpp {
 
         /**
          * @brief oatpp::Any：多态持有任意包装类型，无法静态解包，原样穿透
+         *        （叶子无递归，shallow 等价 deep）
          */
-        template<>
-        struct traits<Any> : traits_base<type_category::opaque> {
+        template<typename Recursion>
+        struct traits<Any, Recursion> : traits_base<type_category::opaque> {
             using WrapperType = Any;
 
             using UnwrapperType = Any;
@@ -281,10 +352,10 @@ namespace oatpp {
         };
 
         /**
-         * @brief oatpp::String -> std::string
+         * @brief oatpp::String -> std::string（叶子无递归，shallow 等价 deep）
          */
-        template<>
-        struct traits<String> : traits_base<type_category::scalar> {
+        template<typename Recursion>
+        struct traits<String, Recursion> : traits_base<type_category::scalar> {
             using WrapperType = String;
 
             using UnwrapperType = std::string;
@@ -303,10 +374,10 @@ namespace oatpp {
         };
 
         /**
-         * @brief oatpp::Boolean -> bool
+         * @brief oatpp::Boolean -> bool（叶子无递归，shallow 等价 deep）
          */
-        template<>
-        struct traits<Boolean> : traits_base<type_category::scalar> {
+        template<typename Recursion>
+        struct traits<Boolean, Recursion> : traits_base<type_category::scalar> {
             using WrapperType = Boolean;
 
             using UnwrapperType = bool;
@@ -329,8 +400,8 @@ namespace oatpp {
          *        （均为 EnumObjectWrapper<T, Interpreter> 的实例）-> C++ 枚举类型 T 本身；
          *        解释器只影响序列化表现，不改变解包后的值类型
          */
-        template<typename T, typename Interpreter>
-        struct traits<data::mapping::type::EnumObjectWrapper<T, Interpreter> >
+        template<typename T, typename Interpreter, typename Recursion>
+        struct traits<data::mapping::type::EnumObjectWrapper<T, Interpreter>, Recursion>
                 : traits_base<type_category::scalar> {
             using WrapperType = data::mapping::type::EnumObjectWrapper<T, Interpreter>;
 
@@ -352,14 +423,16 @@ namespace oatpp {
         };
 
         /**
-         * @brief oatpp::Vector<T> -> std::vector<递归解包后的元素类型>
-         *        null 容器 -> 空 vector（内建约定）；null 元素 -> 由 Policy 决定
+         * @brief oatpp::Vector<T> -> std::vector<元素类型>
+         *        null 容器 -> 空 vector（内建约定）；deep 下 null 元素 -> 由 Policy 决定
          */
-        template<typename T>
-        struct traits<Vector<T> > : traits_base<type_category::container> {
+        template<typename T, typename Recursion>
+        struct traits<Vector<T>, Recursion> : traits_base<type_category::container> {
             using WrapperType = Vector<T>;
 
-            using UnwrapperType = std::vector<typename traits<T>::UnwrapperType>;
+            using element_ops = detail::element_ops<T, Recursion>;
+
+            using UnwrapperType = std::vector<typename element_ops::UnwrappedType>;
 
             template<typename Policy = null_to_throw>
             static UnwrapperType do_unwrapper(Vector<T> const &value, Policy const &policy = {}) {
@@ -369,7 +442,7 @@ namespace oatpp {
                 }
                 result.reserve(value->size());
                 for (auto const &element: *value.get()) {
-                    result.push_back(traits<T>::do_unwrapper(element, policy));
+                    result.push_back(element_ops::unwrap(element, policy));
                 }
                 return result;
             }
@@ -378,22 +451,24 @@ namespace oatpp {
                 WrapperType result = WrapperType::createShared();
                 result->reserve(value.size());
                 for (auto const &element: value) {
-                    result->push_back(traits<T>::do_wrapper(element));
+                    result->push_back(element_ops::wrap(element));
                 }
                 return result;
             }
         };
 
         /**
-         * @brief oatpp::List<T> -> std::list<递归解包后的元素类型>
+         * @brief oatpp::List<T> -> std::list<元素类型>
          *        注意：std::list 无 reserve/operator[]，只能 push_back（历史缺陷 CF02）；
          *        null 容器 -> 空 list（内建约定）
          */
-        template<typename T>
-        struct traits<List<T> > : traits_base<type_category::container> {
+        template<typename T, typename Recursion>
+        struct traits<List<T>, Recursion> : traits_base<type_category::container> {
             using WrapperType = List<T>;
 
-            using UnwrapperType = std::list<typename traits<T>::UnwrapperType>;
+            using element_ops = detail::element_ops<T, Recursion>;
+
+            using UnwrapperType = std::list<typename element_ops::UnwrappedType>;
 
             template<typename Policy = null_to_throw>
             static UnwrapperType do_unwrapper(List<T> const &value, Policy const &policy = {}) {
@@ -402,7 +477,7 @@ namespace oatpp {
                     return result;
                 }
                 for (auto const &element: *value.get()) {
-                    result.push_back(traits<T>::do_unwrapper(element, policy));
+                    result.push_back(element_ops::unwrap(element, policy));
                 }
                 return result;
             }
@@ -410,22 +485,24 @@ namespace oatpp {
             static WrapperType do_wrapper(UnwrapperType const &value) {
                 WrapperType result = WrapperType::createShared();
                 for (auto const &element: value) {
-                    result->push_back(traits<T>::do_wrapper(element));
+                    result->push_back(element_ops::wrap(element));
                 }
                 return result;
             }
         };
 
         /**
-         * @brief oatpp::UnorderedSet<T> -> std::unordered_set<递归解包后的元素类型>
+         * @brief oatpp::UnorderedSet<T> -> std::unordered_set<元素类型>
          *        注意：std::unordered_set 无 push_back，只能 insert（历史缺陷 CF03）；
          *        null 容器 -> 空 set（内建约定）
          */
-        template<typename T>
-        struct traits<UnorderedSet<T> > : traits_base<type_category::container> {
+        template<typename T, typename Recursion>
+        struct traits<UnorderedSet<T>, Recursion> : traits_base<type_category::container> {
             using WrapperType = UnorderedSet<T>;
 
-            using UnwrapperType = std::unordered_set<typename traits<T>::UnwrapperType>;
+            using element_ops = detail::element_ops<T, Recursion>;
+
+            using UnwrapperType = std::unordered_set<typename element_ops::UnwrappedType>;
 
             template<typename Policy = null_to_throw>
             static UnwrapperType do_unwrapper(UnorderedSet<T> const &value, Policy const &policy = {}) {
@@ -434,7 +511,7 @@ namespace oatpp {
                     return result;
                 }
                 for (auto const &element: *value.get()) {
-                    result.insert(traits<T>::do_unwrapper(element, policy));
+                    result.insert(element_ops::unwrap(element, policy));
                 }
                 return result;
             }
@@ -442,7 +519,7 @@ namespace oatpp {
             static WrapperType do_wrapper(UnwrapperType const &value) {
                 WrapperType result = WrapperType::createShared();
                 for (auto const &element: value) {
-                    result->insert(traits<T>::do_wrapper(element));
+                    result->insert(element_ops::wrap(element));
                 }
                 return result;
             }
@@ -450,17 +527,21 @@ namespace oatpp {
 
         /**
          * @brief oatpp::PairList<K, V>（即 DTO 中的 Fields）
-         *        -> std::list<std::pair<递归解包后的 K, 递归解包后的 V> >
+         *        -> std::list<std::pair<元素 K, 元素 V> >
          *        注意：pair 的两个成员都递归解包（历史缺陷 CF06 的类型层问题）；
          *        std::list 无 reserve，只能 emplace_back；null 容器 -> 空 list（内建约定）
          */
-        template<typename K, typename V>
-        struct traits<PairList<K, V> > : traits_base<type_category::container> {
+        template<typename K, typename V, typename Recursion>
+        struct traits<PairList<K, V>, Recursion> : traits_base<type_category::container> {
             using WrapperType = PairList<K, V>;
 
+            using key_ops = detail::element_ops<K, Recursion>;
+
+            using value_ops = detail::element_ops<V, Recursion>;
+
             using UnwrapperType = std::list<std::pair<
-                typename traits<K>::UnwrapperType,
-                typename traits<V>::UnwrapperType> >;
+                typename key_ops::UnwrappedType,
+                typename value_ops::UnwrappedType> >;
 
             template<typename Policy = null_to_throw>
             static UnwrapperType do_unwrapper(PairList<K, V> const &value, Policy const &policy = {}) {
@@ -469,8 +550,8 @@ namespace oatpp {
                     return result;
                 }
                 for (auto const &entry: *value.get()) {
-                    result.emplace_back(traits<K>::do_unwrapper(entry.first, policy),
-                                        traits<V>::do_unwrapper(entry.second, policy));
+                    result.emplace_back(key_ops::unwrap(entry.first, policy),
+                                        value_ops::unwrap(entry.second, policy));
                 }
                 return result;
             }
@@ -478,8 +559,8 @@ namespace oatpp {
             static WrapperType do_wrapper(UnwrapperType const &value) {
                 WrapperType result = WrapperType::createShared();
                 for (auto const &entry: value) {
-                    result->emplace_back(traits<K>::do_wrapper(entry.first),
-                                         traits<V>::do_wrapper(entry.second));
+                    result->emplace_back(key_ops::wrap(entry.first),
+                                         value_ops::wrap(entry.second));
                 }
                 return result;
             }
@@ -487,17 +568,21 @@ namespace oatpp {
 
         /**
          * @brief oatpp::UnorderedMap<K, V>（即 DTO 中的 UnorderedFields）
-         *        -> std::unordered_map<递归解包后的 K, 递归解包后的 V>
-         *        key 与 value 均递归解包（历史缺陷 CF01 的类型层问题）；
+         *        -> std::unordered_map<元素 K, 元素 V>
+         *        注意：key 与 value 均递归解包（历史缺陷 CF01 的类型层问题）；
          *        null 容器 -> 空 map（内建约定）
          */
-        template<typename K, typename V>
-        struct traits<UnorderedMap<K, V> > : traits_base<type_category::container> {
+        template<typename K, typename V, typename Recursion>
+        struct traits<UnorderedMap<K, V>, Recursion> : traits_base<type_category::container> {
             using WrapperType = UnorderedMap<K, V>;
 
+            using key_ops = detail::element_ops<K, Recursion>;
+
+            using value_ops = detail::element_ops<V, Recursion>;
+
             using UnwrapperType = std::unordered_map<
-                typename traits<K>::UnwrapperType,
-                typename traits<V>::UnwrapperType>;
+                typename key_ops::UnwrappedType,
+                typename value_ops::UnwrappedType>;
 
             template<typename Policy = null_to_throw>
             static UnwrapperType do_unwrapper(UnorderedMap<K, V> const &value, Policy const &policy = {}) {
@@ -506,8 +591,8 @@ namespace oatpp {
                     return result;
                 }
                 for (auto const &entry: *value.get()) {
-                    result.emplace(traits<K>::do_unwrapper(entry.first, policy),
-                                   traits<V>::do_unwrapper(entry.second, policy));
+                    result.emplace(key_ops::unwrap(entry.first, policy),
+                                   value_ops::unwrap(entry.second, policy));
                 }
                 return result;
             }
@@ -515,8 +600,8 @@ namespace oatpp {
             static WrapperType do_wrapper(UnwrapperType const &value) {
                 WrapperType result = WrapperType::createShared();
                 for (auto const &entry: value) {
-                    result->emplace(traits<K>::do_wrapper(entry.first),
-                                    traits<V>::do_wrapper(entry.second));
+                    result->emplace(key_ops::wrap(entry.first),
+                                    value_ops::wrap(entry.second));
                 }
                 return result;
             }
@@ -542,12 +627,18 @@ namespace oatpp {
          *        用户对自己的 DTO 写 traits 的全特化（建议继承 dto_traits_base）即可覆盖本诊断；
          *        全特化后 Vector<Object<Dto>> 等嵌套容器的解包自动可用。
          */
-        template<typename T>
-        struct traits<data::mapping::type::DTOWrapper<T> > {
+        template<typename T, typename Recursion>
+        struct traits<data::mapping::type::DTOWrapper<T>, Recursion> {
             static_assert(sizeof(T) != sizeof(T),
                           "traits<DTOWrapper<T>>: DTO 无默认解包目标类型，"
                           "请为你的 DTO 全特化 oatpp::meta::traits（可继承 dto_traits_base）");
         };
+
+        /**
+         * @brief 浅模式入口别名，等价于 traits<T, recursion::shallow>
+         */
+        template<typename T>
+        using shallow_traits = traits<T, recursion::shallow>;
     }
 }
 

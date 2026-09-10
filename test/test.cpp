@@ -18,6 +18,13 @@ class TestDto : public oatpp::DTO {
     DTO_FIELD(oatpp::String, name);
 };
 
+// 刻意不提供任何 traits 特化：用于验证浅模式容器不触碰元素 traits
+class RawDto : public oatpp::DTO {
+    DTO_INIT(RawDto, DTO)
+
+    DTO_FIELD(oatpp::Int32, value);
+};
+
 #include OATPP_CODEGEN_END(DTO)
 
 struct TestStruct {
@@ -572,4 +579,185 @@ TEST_CASE("policy::combine — order matters (first match wins)", "[traits][null
     oatpp::Int32 null_i32;
     // 因为 otherwise 在前面先匹配，Int32 也走 default
     REQUIRE(traits<oatpp::Int32>::do_unwrapper(null_i32, wrong_order{}) == 0);
+}
+
+// ---------------------------------------------------------------------------
+// 14. 浅模式（recursion::shallow）：只转换最外层容器，元素保持 oatpp 包装
+// ---------------------------------------------------------------------------
+
+TEST_CASE("shallow — type-level element types", "[traits][shallow]") {
+    using namespace oatpp::meta;
+
+    // 外层容器转 std，元素保持 oatpp 包装
+    STATIC_REQUIRE((std::is_same<shallow_traits<oatpp::Vector<oatpp::Int32>>::UnwrapperType,
+                                 std::vector<oatpp::Int32>>::value));
+    STATIC_REQUIRE((std::is_same<shallow_traits<oatpp::List<oatpp::String>>::UnwrapperType,
+                                 std::list<oatpp::String>>::value));
+    STATIC_REQUIRE((std::is_same<shallow_traits<oatpp::UnorderedSet<oatpp::Int32>>::UnwrapperType,
+                                 std::unordered_set<oatpp::Int32>>::value));
+    STATIC_REQUIRE((std::is_same<shallow_traits<oatpp::PairList<oatpp::String, oatpp::Int32>>::UnwrapperType,
+                                 std::list<std::pair<oatpp::String, oatpp::Int32>>>::value));
+    STATIC_REQUIRE((std::is_same<shallow_traits<oatpp::UnorderedMap<oatpp::String, oatpp::Int32>>::UnwrapperType,
+                                 std::unordered_map<oatpp::String, oatpp::Int32>>::value));
+
+    // 嵌套：只解最外层，内层仍是 oatpp 容器
+    STATIC_REQUIRE((std::is_same<
+        shallow_traits<oatpp::Vector<oatpp::Vector<oatpp::Int32>>>::UnwrapperType,
+        std::vector<oatpp::Vector<oatpp::Int32>>>::value));
+
+    // 叶子无递归：shallow 等价 deep
+    STATIC_REQUIRE((std::is_same<traits<oatpp::String, recursion::shallow>::UnwrapperType,
+                                 std::string>::value));
+    STATIC_REQUIRE((std::is_same<traits<oatpp::Int32, recursion::shallow>::UnwrapperType,
+                                 std::int32_t>::value));
+
+    // 默认参数与显式 deep 等价
+    STATIC_REQUIRE((std::is_same<
+        traits<oatpp::Vector<oatpp::Int32>>::UnwrapperType,
+        traits<oatpp::Vector<oatpp::Int32>, recursion::deep>::UnwrapperType>::value));
+
+    // 分类标志与 deep 一致（Recursion 只影响元素类型，不影响类型分类）
+    STATIC_REQUIRE(shallow_traits<oatpp::Vector<oatpp::Int32>>::is_container);
+    STATIC_REQUIRE(shallow_traits<oatpp::Vector<oatpp::Int32>>::category == type_category::container);
+}
+
+TEST_CASE("shallow — unwrap keeps element wrappers", "[traits][shallow]") {
+    using namespace oatpp::meta;
+
+    auto vec = oatpp::Vector<oatpp::Int32>::createShared();
+    vec->push_back(oatpp::Int32(1));
+    vec->push_back(oatpp::Int32()); // null
+    vec->push_back(oatpp::Int32(3));
+
+    std::vector<oatpp::Int32> result = shallow_traits<oatpp::Vector<oatpp::Int32>>::do_unwrapper(vec);
+    REQUIRE(result.size() == 3);
+    REQUIRE(result[0].getValue(0) == 1);
+    // 浅模式不解包元素，null 元素原样保留、不进入 Policy
+    REQUIRE(result[1].get() == nullptr);
+    REQUIRE(result[2].getValue(0) == 3);
+
+    // 对比：deep 默认策略对同样的 null 元素抛异常
+    REQUIRE_THROWS_AS(traits<oatpp::Vector<oatpp::Int32>>::do_unwrapper(vec), null_unwrap_error);
+}
+
+TEST_CASE("shallow — nested: null inner container kept null", "[traits][shallow]") {
+    using namespace oatpp::meta;
+
+    auto vv = oatpp::Vector<oatpp::Vector<oatpp::Int32>>::createShared();
+    {
+        auto inner = oatpp::Vector<oatpp::Int32>::createShared();
+        inner->push_back(oatpp::Int32(1));
+        inner->push_back(oatpp::Int32(2));
+        vv->push_back(inner);
+    }
+    vv->push_back(oatpp::Vector<oatpp::Int32>()); // null 内层
+
+    std::vector<oatpp::Vector<oatpp::Int32>> result =
+            shallow_traits<oatpp::Vector<oatpp::Vector<oatpp::Int32>>>::do_unwrapper(vv);
+    REQUIRE(result.size() == 2);
+    {
+        auto const &inner = *result[0].get();
+        REQUIRE(inner.size() == 2);
+        REQUIRE(inner[0].getValue(0) == 1);
+        REQUIRE(inner[1].getValue(0) == 2);
+    }
+    // 浅模式不看进元素：null 子容器保持 null，不会被转成空容器
+    REQUIRE(result[1].get() == nullptr);
+
+    // 对比：deep 下 null 内层容器会被转成空容器
+    auto deep_result = traits<oatpp::Vector<oatpp::Vector<oatpp::Int32>>>::do_unwrapper(vv);
+    REQUIRE(deep_result.size() == 2);
+    REQUIRE(deep_result[1].empty());
+}
+
+TEST_CASE("shallow — container of DTO needs no traits specialization", "[traits][shallow][dto]") {
+    using namespace oatpp::meta;
+
+    // RawDto 没有任何 traits 特化；浅模式不触碰 traits<Object<RawDto>>，因此可编译
+    STATIC_REQUIRE((std::is_same<
+        shallow_traits<oatpp::Vector<oatpp::Object<RawDto>>>::UnwrapperType,
+        std::vector<oatpp::Object<RawDto>>>::value));
+
+    auto vec = oatpp::Vector<oatpp::Object<RawDto>>::createShared();
+    {
+        auto dto = RawDto::createShared();
+        dto->value = 7;
+        vec->push_back(dto);
+    }
+    vec->push_back(oatpp::Object<RawDto>()); // null DTO
+
+    std::vector<oatpp::Object<RawDto>> result =
+            shallow_traits<oatpp::Vector<oatpp::Object<RawDto>>>::do_unwrapper(vec);
+    REQUIRE(result.size() == 2);
+    REQUIRE(result[0]->value.getValue(0) == 7);
+    REQUIRE(result[1].get() == nullptr);
+}
+
+TEST_CASE("shallow — wrapper round trip", "[traits][shallow]") {
+    using namespace oatpp::meta;
+
+    // Vector<Int32>
+    std::vector<oatpp::Int32> v{oatpp::Int32(1), oatpp::Int32(2), oatpp::Int32()};
+    auto wrapped = shallow_traits<oatpp::Vector<oatpp::Int32>>::do_wrapper(v);
+    REQUIRE(wrapped.get() != nullptr); // 恒产生非 null 外层容器
+    {
+        auto const &inner = *wrapped.get();
+        REQUIRE(inner.size() == 3);
+        REQUIRE(inner[0].getValue(0) == 1);
+        REQUIRE(inner[2].get() == nullptr); // 元素 null 原样保留
+    }
+    auto back = shallow_traits<oatpp::Vector<oatpp::Int32>>::do_unwrapper(wrapped);
+    REQUIRE(back.size() == 3);
+    REQUIRE(back[1].getValue(0) == 2);
+
+    // List<String>
+    std::list<oatpp::String> sl{oatpp::String("a"), oatpp::String("b")};
+    auto wrapped_l = shallow_traits<oatpp::List<oatpp::String>>::do_wrapper(sl);
+    REQUIRE(wrapped_l.get() != nullptr);
+    REQUIRE(shallow_traits<oatpp::List<oatpp::String>>::do_unwrapper(wrapped_l).size() == 2);
+
+    // UnorderedSet<Int32>
+    std::unordered_set<oatpp::Int32> ss{oatpp::Int32(5)};
+    auto wrapped_s = shallow_traits<oatpp::UnorderedSet<oatpp::Int32>>::do_wrapper(ss);
+    REQUIRE(wrapped_s.get() != nullptr);
+    REQUIRE(shallow_traits<oatpp::UnorderedSet<oatpp::Int32>>::do_unwrapper(wrapped_s).size() == 1);
+
+    // PairList<String, Int32>
+    std::list<std::pair<oatpp::String, oatpp::Int32>> pl{
+        {oatpp::String("x"), oatpp::Int32(10)}
+    };
+    auto wrapped_pl = shallow_traits<oatpp::PairList<oatpp::String, oatpp::Int32>>::do_wrapper(pl);
+    REQUIRE(wrapped_pl.get() != nullptr);
+    {
+        auto back_pl = shallow_traits<oatpp::PairList<oatpp::String, oatpp::Int32>>::do_unwrapper(wrapped_pl);
+        REQUIRE(back_pl.size() == 1);
+        REQUIRE(back_pl.front().second.getValue(0) == 10);
+    }
+
+    // UnorderedMap<String, Int32>（key 为 oatpp::String，依赖 oatpp 提供的 std::hash）
+    std::unordered_map<oatpp::String, oatpp::Int32> m{
+        {oatpp::String("a"), oatpp::Int32(1)},
+        {oatpp::String("b"), oatpp::Int32(2)}
+    };
+    auto wrapped_map = shallow_traits<oatpp::UnorderedMap<oatpp::String, oatpp::Int32>>::do_wrapper(m);
+    REQUIRE(wrapped_map.get() != nullptr);
+    {
+        auto back_map = shallow_traits<oatpp::UnorderedMap<oatpp::String, oatpp::Int32>>::do_unwrapper(wrapped_map);
+        REQUIRE(back_map.size() == 2);
+        REQUIRE(back_map.at(oatpp::String("a")).getValue(0) == 1);
+        REQUIRE(back_map.at(oatpp::String("b")).getValue(0) == 2);
+    }
+}
+
+TEST_CASE("shallow — null container -> empty", "[traits][shallow][null]") {
+    using namespace oatpp::meta;
+
+    oatpp::Vector<oatpp::Int32> null_vec;
+    REQUIRE(shallow_traits<oatpp::Vector<oatpp::Int32>>::do_unwrapper(null_vec).empty());
+
+    oatpp::UnorderedMap<oatpp::String, oatpp::Int32> null_map;
+    REQUIRE(shallow_traits<oatpp::UnorderedMap<oatpp::String, oatpp::Int32>>::do_unwrapper(null_map).empty());
+
+    oatpp::List<oatpp::String> null_list;
+    REQUIRE(shallow_traits<oatpp::List<oatpp::String>>::do_unwrapper(null_list).empty());
 }
