@@ -1,16 +1,14 @@
 # oatpp-meta
 
-纯头文件 **C++11** 模板元编程库（CMake target：`oatpp_meta`，`INTERFACE`），核心能力是在
-std 类型与 oatpp 包装类型（`oatpp::Vector<T>`、`oatpp::String`、`oatpp::Int32`、`DTOWrapper`
-等）之间做**类型层深解包 / 深包装与运行时转换**。唯一外部依赖为 oatpp，其来源可在
-CMake 配置时选择（见「依赖的 oatpp 从哪来」）。
+**中文** | [English](i18n/README.en.md)
 
-- 单头文件：`src/meta.hpp`，命名空间 `oatpp::meta`
-- 注释与文档为中文；库本体刻意只用 C++11 特性（测试在 `-std=c++11` 下全绿）
+单头文件 **C++11** 模板元编程库（CMake target：`oatpp_meta`，`INTERFACE`），核心能力是在
+std 类型与 oatpp 包装类型（`oatpp::Vector<T>`、`oatpp::String`、`oatpp::Int32`、`DTOWrapper`
+等）之间做**类型层深解包 / 深包装与运行时转换**。
 
 ## 核心接口：`oatpp::meta::traits<T>`
 
-按 oatpp 类型族提供全特化，每个特化暴露四个成员：
+按 oatpp 类型族提供全特化，每个特化以下成员：
 
 | 成员 | 说明 |
 | --- | --- |
@@ -19,13 +17,13 @@ CMake 配置时选择（见「依赖的 oatpp 从哪来」）。
 | `do_unwrapper(value, Policy)` | 运行时解包；Policy 决定标量 null 语义，沿递归逐层传递 |
 | `do_wrapper(value)` | 运行时反向包装，把 `UnwrapperType` 包装成 `WrapperType`；恒产生非 null 包装 |
 
-内置覆盖：
+对于以下oatpp类型，本库提供了特化：
 
-- 非 oatpp 类型：按 **passthrough** 处理，原样穿透；
+- 非 oatpp 类型：原样穿透；
 - `oatpp::Int8...Float64` 等 `Primitive<T, Clazz>`：数值原语；
 - `oatpp::String` / `oatpp::Boolean` / `EnumObjectWrapper`：scalar 叶子；
 - 容器类型（`oatpp::Vector/List/UnorderedSet`、`PairList`、`UnorderedMap`）：元素与键值递归解包；
-- `oatpp::Void` / `oatpp::Any`：opaque，无法静态解包；
+- `oatpp::Void` / `oatpp::Any`：无法静态解包，按原样保留；
 - DTO（`oatpp::Object<T>`）：**用户定制点**（见下）。
 
 类型族标志由公共基类 `traits_base<type_category>` 派生：全部 `is_xxx` 常量由互斥的
@@ -104,7 +102,7 @@ struct traits<oatpp::Object<TestDto>> : dto_traits_base<TestDto, TestStruct> {
 }}
 ```
 
-## 依赖的 oatpp 从哪来
+##  oatpp 依赖
 
 本项目仿照官方 oatpp 组件（如 oatpp-swagger）的做法，在配置阶段用 `OATPP_MODULES_LOCATION`
 变量选择 oatpp 依赖的来源，取值如下：

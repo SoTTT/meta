@@ -41,7 +41,8 @@ AUTO），逻辑见根 CMakeLists.txt 的「oatpp 依赖来源选择」段。
   `CMakeLists.txt`（INTERFACE target `oatpp_meta`）
 - `test/` — `test.cpp`（Catch2 v2，含 `CATCH_CONFIG_MAIN`，22 个用例）+ `CMakeLists.txt`
   （FetchContent 拉 Catch2 v2.13.10；可执行 target `oatpp_meta_test`）
-- `README.md` — 面向库使用者的项目文档（核心接口 / 用法示例 / 构建测试），改动对外接口时记得同步
+- `README.md`（中文，默认）与 `i18n/README.en.md`（英文）— 面向库使用者的双语项目文档
+  （核心接口 / 用法示例 / 构建测试）；今后新增的语言版本统一放 `i18n/`，改动对外接口时各版本同步
 - 根 `CMakeLists.txt` — 设 C++11（`CMAKE_CXX_STANDARD 11`），并实现「oatpp 依赖来源选择」
   （`OATPP_MODULES_LOCATION` 四态 + 嵌入保护 + 指引式报错），随后 `add_subdirectory(src test)`
 - `test/CMakeLists.txt` 里 `META_BUILD_COMPILE_FAIL_PROBES` 选项及 `compile_fail/cf*.cpp`
