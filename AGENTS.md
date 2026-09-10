@@ -4,15 +4,18 @@
 
 `oatpp-meta` 是一个**纯头文件 C++11 模板元编程库**（CMake target `oatpp_meta`，`INTERFACE`），
 在 std 类型与 oatpp 包装类型（`oatpp::Vector<T>`、`oatpp::String`、`DTOWrapper` 等）之间做
-**类型层深解包/深包装与运行时转换**。依赖 oatpp；其来源在 CMake 配置阶段由
+**类型层解包/包装与运行时转换**（递归深度可选）。依赖 oatpp；其来源在 CMake 配置阶段由
 `OATPP_MODULES_LOCATION` 选择（仿官方 oatpp 模块：INSTALLED / EXTERNAL / CUSTOM，另加默认
 AUTO），逻辑见根 CMakeLists.txt 的「oatpp 依赖来源选择」段。
 代码注释与提交信息为中文，保持一致。
 
 ## 核心接口（src/meta.hpp，命名空间 `oatpp::meta`）
 
-- `traits<T>`：按 oatpp 类型族全特化的入口。成员：`WrapperType` / `UnwrapperType` /
-  `do_unwrapper(value, Policy)` / `do_wrapper(value)`。
+- `traits<T, Recursion = recursion::deep>`：按 oatpp 类型族特化的入口。成员：`WrapperType` /
+  `UnwrapperType` / `do_unwrapper(value, Policy)` / `do_wrapper(value)`。第二参数为编译期递归
+  开关，`recursion::deep`（默认）或 `recursion::shallow`；别名
+  `shallow_traits<T> == traits<T, recursion::shallow>`。浅模式只转最外层，元素原样保留、
+  不进 Policy，也不实例化 `traits<Elem>`（容器装 DTO 因此无需 DTO 特化）。
 - `traits_base<C>`：公共基类，只需指定互斥的 `type_category`（passthrough / primitive /
   scalar / container / object / opaque），全部 `is_xxx` 标志由此派生，非法组合不可表达。
 - 内建特化：passthrough（非 oatpp 类型原样穿透）；`Primitive<T,Clazz>`（数值）；
@@ -23,7 +26,8 @@ AUTO），逻辑见根 CMakeLists.txt 的「oatpp 依赖来源选择」段。
   属设计行为而非缺陷）。用户对自己的 DTO 全特化 `traits`，推荐继承辅助基类
   `dto_traits_base<MyDto, MyStruct>`（WrapperType / UnwrapperType / category 已填好），
   自行实现 `do_unwrapper`（及可选的 `do_wrapper`）；特化后 `Vector<Object<Dto>>` 等嵌套
-  解包自动可用。
+  解包自动可用。若只要 `std::vector<Object<Dto>>` 而不做字段级转换，用
+  `shallow_traits<Vector<Object<Dto>>>` 即可，无需该特化。
 - **null 语义三层模型**（meta.hpp 文件头注释有完整版）：
   1. 容器 null → 空容器（内建约定，不进 Policy）；
   2. 标量 null（任意深度，含容器内元素）→ Policy 决定：默认 `null_to_throw`（抛
@@ -39,7 +43,8 @@ AUTO），逻辑见根 CMakeLists.txt 的「oatpp 依赖来源选择」段。
 
 - `src/` — 库本体：`meta.hpp`（唯一头文件，无 .cpp，include guard `OATPP_META_HPP`）+
   `CMakeLists.txt`（INTERFACE target `oatpp_meta`）
-- `test/` — `test.cpp`（Catch2 v2，含 `CATCH_CONFIG_MAIN`，22 个用例）+ `CMakeLists.txt`
+- `test/` — `test.cpp`（Catch2 v2，含 `CATCH_CONFIG_MAIN`，28 个用例；含无 traits 特化的
+  `RawDto`，用于验证浅模式容器不触碰元素 traits）+ `CMakeLists.txt`
   （FetchContent 拉 Catch2 v2.13.10；可执行 target `oatpp_meta_test`）
 - `README.md`（中文，默认）与 `i18n/README.en.md`（英文）— 面向库使用者的双语项目文档
   （核心接口 / 用法示例 / 构建测试）；今后新增的语言版本统一放 `i18n/`，改动对外接口时各版本同步
@@ -61,7 +66,9 @@ AUTO），逻辑见根 CMakeLists.txt 的「oatpp 依赖来源选择」段。
 - `AUTO`：本机已有安装的 oatpp 1.3.0+ 则 `find_package` 使用，否则回退 `EXTERNAL`；
 - `INSTALLED`：要求已安装 oatpp（可用 `oatpp_DIR` 指定自定义安装位置）；
 - `EXTERNAL`：构建阶段从 GitHub 下载并编译 oatpp。默认拉 `origin/master`（非固定版本），
-  需要可复现请固定 `-DOATPP_GIT_TAG=1.3.0`（本仓库基于 1.3.0 验证）；
+  需要可复现请固定 `-DOATPP_GIT_TAG=1.3.0`（本仓库基于 1.3.0 验证）。**注意**：oatpp 的
+  master 已把 `oatpp/core/Types.hpp` 迁到 `oatpp/Types.hpp`，默认 master 目前编译不过本库
+  （本库 include `<oatpp/core/Types.hpp>`），实际构建请固定 `-DOATPP_GIT_TAG=1.3.0`；
 - `CUSTOM`：由 `OATPP_DIR_SRC`（含 oatpp 头文件）/ `OATPP_DIR_LIB`（含 liboatpp）本地提供；
 - 作为子项目被引用且调用方已提供 oatpp target 时直接复用，跳过选择。
 
@@ -69,8 +76,8 @@ AUTO），逻辑见根 CMakeLists.txt 的「oatpp 依赖来源选择」段。
 mkdir -p build && cd build          # 或用 CLion 的 cmake-build-debug/
 cmake ..                            # 默认 AUTO；Catch2 由 test/CMakeLists 在配置阶段拉取
 cmake --build .                     # AUTO/EXTERNAL 时，构建阶段会先联网下载并编译 oatpp
-./test/oatpp_meta_test              # 跑全部用例
-./test/oatpp_meta_test "[null]"     # 按 tag 过滤；现有 tag：[traits] [null] [dto] [policy]
+./test/oatpp_meta_test              # 跑全部用例（当前 28 用例 / 167 断言）
+./test/oatpp_meta_test "[null]"     # 按 tag 过滤；现有 tag：[traits] [null] [dto] [policy] [shallow]
 ```
 
 注意：`OATPP_MODULES_LOCATION` 取值非法、`INSTALLED` 找不到 oatpp、`CUSTOM` 缺目录/路径不对时，
@@ -88,3 +95,8 @@ configure 会给出指引式报错。根 `.gitignore` 只排除 `build/`，CLion
   容器 wrapper 都有 `initializer_list` 构造函数，`{}` 会被 init-list 劫持静默改变语义。
 - 平台：macOS / Apple Clang，库按 **C++11** 编写（`policy` 组合器用 tag dispatch 实现编译期
   分支，刻意不依赖 `if constexpr` / `std::is_same_v` 等 C++14/17 特性），编译错误信息以此为准。
+
+## 文档写作准则
+
+README 与面向使用者的文档遵循用户级 skill `readme-writing`
+（`~/.agents/skills/readme-writing/SKILL.md`）：三段式开头、删冗余句、书面语域、多语言逐句对齐。

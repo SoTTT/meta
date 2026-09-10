@@ -3,20 +3,23 @@
 [中文](../README.md) | **English**
 
 A single-header **C++11** template metaprogramming library (CMake target: `oatpp_meta`, `INTERFACE`)
-that performs **type-level deep unwrapping / wrapping and runtime conversion** between std types
-and oatpp wrapper types (`oatpp::Vector<T>`, `oatpp::String`, `oatpp::Int32`, `DTOWrapper`, etc.).
+whose core capability is **type-level unwrapping / wrapping and runtime conversion** between std
+types and oatpp wrapper types (`oatpp::Vector<T>`, `oatpp::String`, `oatpp::Int32`, `DTOWrapper`,
+etc.); the recursion depth is selectable (deep by default, or outermost-only).
 
-## Core interface: `oatpp::meta::traits<T>`
+## Core interface: `oatpp::meta::traits<T, Recursion>`
 
-Full specializations are provided per oatpp type family. Each specialization provides the following
-members:
+Specializations are provided per oatpp type family, with the following members:
 
 | Member | Description |
 | --- | --- |
 | `WrapperType` | the oatpp wrapper type itself |
-| `UnwrapperType` | the std target type after deep unwrapping (nested containers expanded recursively) |
+| `UnwrapperType` | the std target type after unwrapping (`Recursion` decides whether nested containers are expanded) |
 | `do_unwrapper(value, Policy)` | runtime unwrapping; the Policy decides scalar null semantics and is passed down the recursion |
 | `do_wrapper(value)` | runtime reverse wrapping, packs `UnwrapperType` into `WrapperType`; always produces a non-null wrapper |
+
+The second template parameter `Recursion` defaults to `recursion::deep`; pass `recursion::shallow`
+for shallow mode (see "Recursion control").
 
 The library provides specializations for the following oatpp types:
 
@@ -51,6 +54,44 @@ std::vector<std::int32_t> r = traits<oatpp::Vector<oatpp::Int32>>::do_unwrapper(
 std::vector<std::int32_t> back = {7, 8};
 oatpp::Vector<oatpp::Int32> w = traits<oatpp::Vector<oatpp::Int32>>::do_wrapper(back); // non-null wrapper
 ```
+
+## Recursion control: deep vs shallow
+
+An oatpp container's elements may themselves be containers or DTOs, and not all of them have an
+unwrapping target; to control the recursion depth, the second template parameter of
+`traits<T, Recursion>` offers two modes, `deep` / `shallow`.
+
+- `recursion::deep` (default): elements and key/values are unwrapped recursively;
+- `recursion::shallow`: only the outermost container is converted; elements keep their oatpp
+  wrapper types.
+
+```cpp
+using oatpp::meta::shallow_traits;   // == traits<T, recursion::shallow>
+
+// deep (default)
+traits<oatpp::Vector<oatpp::Vector<oatpp::Int32>>>::UnwrapperType
+    // std::vector<std::vector<std::int32_t>>
+
+// shallow
+shallow_traits<oatpp::Vector<oatpp::Vector<oatpp::Int32>>>::UnwrapperType
+    // std::vector<oatpp::Vector<oatpp::Int32>>
+```
+
+A container of DTOs needs no `traits` specialization for that DTO:
+
+```cpp
+// MyDto has no traits specialization; deep would trigger the DTO customization static_assert
+std::vector<oatpp::Object<MyDto>> v =
+    shallow_traits<oatpp::Vector<oatpp::Object<MyDto>>>::do_unwrapper(dtos);
+```
+
+Shallow semantics:
+
+- elements (including null ones) are kept as-is and **never enter the Policy**, so null elements
+  do not throw;
+- a null container still becomes an empty container;
+- a null inner container **stays null** and is not turned into an empty container;
+- leaf types (primitive / scalar / opaque) have no recursion, so shallow is equivalent to deep.
 
 ## Null handling
 
@@ -89,9 +130,10 @@ auto result = traits<SomeOatppType>::do_unwrapper(value, my_policy{});
 
 ## DTO customization point
 
-To convert DTO objects uniformly, oatpp-meta exposes a customization point: inherit the helper base
+DTO fields have no uniform C++ target type and can only be specified by the user; to convert DTO
+objects uniformly, oatpp-meta exposes a customization point: inherit the helper base
 `dto_traits_base<MyDto, MyStruct>`, specialize `oatpp::meta::traits`, and implement `do_unwrapper`
-(plus optional `do_wrapper`) to support an oatpp DTO. Example:
+(plus optional `do_wrapper`). Example:
 
 ```cpp
 namespace oatpp { namespace meta {
@@ -110,6 +152,10 @@ struct traits<oatpp::Object<TestDto>> : dto_traits_base<TestDto, TestStruct> {
 }}
 ```
 
+If you only want a `std::vector<oatpp::Object<MyDto>>` without field-level conversion, use
+`shallow_traits<oatpp::Vector<oatpp::Object<MyDto>>>` directly and skip the specialization above
+(see "Recursion control").
+
 ## oatpp dependency
 
 Following the official oatpp components (such as oatpp-swagger), the library lets you choose where
@@ -120,7 +166,9 @@ the oatpp dependency comes from at configure time via the `OATPP_MODULES_LOCATIO
 - `INSTALLED`: uses the installed oatpp found by `find_package` (point `oatpp_DIR` at a custom
   install location if needed).
 - `EXTERNAL`: downloads and builds oatpp from GitHub during the build. It fetches `origin/master`
-  by default; pin a version or branch with `OATPP_GIT_TAG`.
+  by default; pin a version or branch with `OATPP_GIT_TAG`. Note: oatpp's master has moved
+  `oatpp/core/Types.hpp` to `oatpp/Types.hpp`, so the default master currently does not compile
+  this library; pin `-DOATPP_GIT_TAG=1.3.0` for an actual build.
 - `CUSTOM`: uses local oatpp headers and library. `OATPP_DIR_SRC` is the directory containing
   oatpp headers (such as `<oatpp sources>/src`) and `OATPP_DIR_LIB` is the directory containing
   `liboatpp`.
@@ -146,8 +194,8 @@ that target is reused and nothing is searched or downloaded.
 mkdir -p build && cd build          # or CLion's cmake-build-debug/
 cmake ..                            # default AUTO: with no installed oatpp, the build stage downloads and compiles one
 cmake --build .                     # test binary: build/test/oatpp_meta_test
-./test/oatpp_meta_test              # all tests (currently 22 cases / 120 assertions passing)
-./test/oatpp_meta_test "[null]"     # filter by tag; current tags: [traits] [null] [dto] [policy]
+./test/oatpp_meta_test              # all tests (currently 28 cases / 167 assertions passing)
+./test/oatpp_meta_test "[null]"     # filter by tag; current tags: [traits] [null] [dto] [policy] [shallow]
 ```
 
 - Language standard: C++11 (`CMAKE_CXX_STANDARD 11`); oatpp and Catch2 are also compiled as C++11.
