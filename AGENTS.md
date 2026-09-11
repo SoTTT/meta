@@ -48,10 +48,12 @@ AUTO），逻辑见根 CMakeLists.txt 的「oatpp 依赖来源选择」段。
   （FetchContent 拉 Catch2 v2.13.10；可执行 target `oatpp_meta_test`）
 - `README.md`（中文，默认）与 `i18n/README.en.md`（英文）— 面向库使用者的双语项目文档
   （核心接口 / 用法示例 / 构建测试）；今后新增的语言版本统一放 `i18n/`，改动对外接口时各版本同步
-- 根 `CMakeLists.txt` — 设 C++11（`CMAKE_CXX_STANDARD 11`），并实现「oatpp 依赖来源选择」
-  （`OATPP_MODULES_LOCATION` 四态 + 嵌入保护 + 指引式报错），随后 `add_subdirectory(src test)`
-- `test/CMakeLists.txt` 里 `META_BUILD_COMPILE_FAIL_PROBES` 选项及 `compile_fail/cf*.cpp`
-  GLOB 是**历史残骸**：`test/compile_fail/` 目录已删除，该选项目前是空操作。
+- 根 `CMakeLists.txt` — 设 C++11（`CMAKE_CXX_STANDARD 11`），`project(... VERSION 1.0.0)`
+  声明版本，并实现「oatpp 依赖来源选择」（`OATPP_MODULES_LOCATION` 四态 + 嵌入保护 +
+  指引式报错），随后 `add_subdirectory(src test)`
+- `LICENSE` — Apache License 2.0；README 双语版末尾均有 License 一节，改动时同步
+- `.github/workflows/ci.yml` — GitHub Actions，ubuntu-latest + macOS-latest 矩阵构建并跑
+  测试，固定 `-DOATPP_GIT_TAG=1.3.0`（原因见「构建与测试」节）
 
 历史（git 中可查）：`expose_issues.cpp` / `test/compile_fail/`（cf01~cf06 探针）/
 `benchmark/` / `src/oatpp_helper.hpp`、`traits.hpp`、`template_helper.hpp`、`md_operation.hpp`

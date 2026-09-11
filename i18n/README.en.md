@@ -201,4 +201,8 @@ cmake --build .                     # test binary: build/test/oatpp_meta_test
 - Language standard: C++11 (`CMAKE_CXX_STANDARD 11`); oatpp and Catch2 are also compiled as C++11.
 - To use the library, only `src/meta.hpp` is needed; the library itself depends only on oatpp,
   see above for choosing its source.
-- Development environment: macOS / Apple Clang.
+- Development environment: macOS / Apple Clang; CI (GitHub Actions) builds and tests on ubuntu-latest and macOS-latest.
+
+## License
+
+[Apache License 2.0](../LICENSE)

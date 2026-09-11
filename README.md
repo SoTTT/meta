@@ -184,4 +184,8 @@ cmake --build .                     # 测试可执行文件：build/test/oatpp_m
 
 - 语言标准：C++11（`CMAKE_CXX_STANDARD 11`），oatpp / Catch2 亦以 C++11 编译。
 - 作为库使用时只需引入 `src/meta.hpp`；库本体只依赖 oatpp，具体来源见上文。
-- 开发环境：macOS / Apple Clang。
+- 开发环境：macOS / Apple Clang；CI（GitHub Actions）覆盖 ubuntu-latest + macOS-latest 双平台构建测试。
+
+## 许可证
+
+[Apache License 2.0](LICENSE)

@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # oatpp master 已迁移头文件路径（oatpp/Types.hpp），本库基于 1.3.0 验证，必须固定 tag
+      - name: Configure
+        run: cmake -B build -DOATPP_GIT_TAG=1.3.0 -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Test
+        run: ./build/test/oatpp_meta_test
