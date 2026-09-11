@@ -18,6 +18,12 @@ else()
         target_link_directories(oatpp_meta INTERFACE ${OATPP_DIR_LIB})
     endif()
     target_link_libraries(oatpp_meta INTERFACE oatpp)
+    if(WIN32)
+        # EXTERNAL/CUSTOM 路径绕过了 oatpp 官方 CMake config，需手动补 Windows 系统库：
+        # oatpp 的 Environment::init/destroy 依赖 Winsock（WSAStartup/WSACleanup），
+        # 缺少 ws2_32 会在 MSVC 链接期报 LNK2019。
+        target_link_libraries(oatpp_meta INTERFACE ws2_32)
+    endif()
 endif()
 
 target_include_directories(oatpp_meta INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
