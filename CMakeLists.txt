@@ -63,7 +63,11 @@ if(NOT TARGET oatpp AND NOT TARGET oatpp::oatpp)
         ExternalProject_Add(${LIB_OATPP_EXTERNAL}
                 GIT_REPOSITORY "https://github.com/oatpp/oatpp.git"
                 GIT_TAG ${OATPP_GIT_TAG}
+                # CMAKE_POLICY_VERSION_MINIMUM=3.5：oatpp 1.3.0 的 cmake_minimum_required 低于 3.5，
+                # CMake 4.x（如 macos-latest runner 自带版本）已移除 <3.5 兼容，需显式放行；
+                # 旧版 CMake 不认识该变量，只会产生无害的 unused-variable 提示。
                 CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DOATPP_INSTALL=OFF -DOATPP_BUILD_TESTS=OFF
+                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                 INSTALL_COMMAND cmake -E echo "SKIP INSTALL '${LIB_OATPP_EXTERNAL}'"
         )
         ExternalProject_Get_Property(${LIB_OATPP_EXTERNAL} BINARY_DIR)
