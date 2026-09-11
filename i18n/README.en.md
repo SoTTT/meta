@@ -206,3 +206,5 @@ cmake --build .                     # test binary: build/test/oatpp_meta_test
 ## License
 
 [Apache License 2.0](../LICENSE)
+
+oatpp-meta is a community project and is not affiliated with or endorsed by the official oatpp project (oatpp.io); the "oatpp" name belongs to its respective owner.

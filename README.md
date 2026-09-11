@@ -189,3 +189,5 @@ cmake --build .                     # 测试可执行文件：build/test/oatpp_m
 ## 许可证
 
 [Apache License 2.0](LICENSE)
+
+oatpp-meta 是社区项目，与 oatpp 官方（oatpp.io）无隶属或背书关系；"oatpp" 名称归其各自所有者所有。

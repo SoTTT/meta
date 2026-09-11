@@ -7,8 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ###################################################################################################
 ## oatpp 依赖来源选择
-## 仿官方 oatpp 模块（oatpp-swagger 等）顶层 CMakeLists.txt 的三态机制：
-##   INSTALLED / EXTERNAL / CUSTOM，另加 AUTO（默认）与子项目嵌入保护。
+## 机制设计参考自 oatpp 官方模块 oatpp-swagger（Apache License 2.0）顶层 CMakeLists.txt
+## 的三态机制（INSTALLED / EXTERNAL / CUSTOM），本文件为独立实现，
+## 另加 AUTO（默认）与子项目嵌入保护。
 ## 注：打印给用户看的 message()/CACHE STRING 一律用英文，避免部分终端出现乱码。
 ###################################################################################################
 
