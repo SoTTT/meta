@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [master]
 
+# Windows 的 run 步骤默认用 pwsh，会把 -DOATPP_GIT_TAG=1.3.0 截断成 1（git 报
+# "invalid reference: 1"）。统一用 bash（Windows runner 自带 Git Bash）规避参数解析差异。
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build-and-test:
     strategy:
@@ -26,7 +32,6 @@ jobs:
 
       # 多配置生成器（Windows）产物在 Release/ 子目录；单配置生成器直接在 build/test/
       - name: Test
-        shell: bash
         run: |
           if [ -f build/test/Release/oatpp_meta_test.exe ]; then
             ./build/test/Release/oatpp_meta_test.exe
