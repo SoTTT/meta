@@ -2,6 +2,10 @@
 
 **中文** | [English](i18n/README.en.md)
 
+[![CI](https://github.com/SoTTT/meta/actions/workflows/ci.yml/badge.svg)](https://github.com/SoTTT/meta/actions/workflows/ci.yml)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
+![C++](https://img.shields.io/badge/C%2B%2B-11-blue)
+
 单头文件 **C++11** 模板元编程库（CMake target：`oatpp_meta`，`INTERFACE`），核心能力是在
 std 类型与 oatpp 包装类型（`oatpp::Vector<T>`、`oatpp::String`、`oatpp::Int32`、`DTOWrapper`
 等）之间做**类型层解包 / 包装与运行时转换**，递归深度可选（默认深解包，也可只转最外层）。

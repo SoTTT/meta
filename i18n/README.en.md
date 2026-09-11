@@ -2,6 +2,10 @@
 
 [中文](../README.md) | **English**
 
+[![CI](https://github.com/SoTTT/meta/actions/workflows/ci.yml/badge.svg)](https://github.com/SoTTT/meta/actions/workflows/ci.yml)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
+![C++](https://img.shields.io/badge/C%2B%2B-11-blue)
+
 A single-header **C++11** template metaprogramming library (CMake target: `oatpp_meta`, `INTERFACE`)
 whose core capability is **type-level unwrapping / wrapping and runtime conversion** between std
 types and oatpp wrapper types (`oatpp::Vector<T>`, `oatpp::String`, `oatpp::Int32`, `DTOWrapper`,
