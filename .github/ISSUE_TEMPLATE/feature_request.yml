@@ -1,0 +1,19 @@
+name: 功能请求 / Feature Request
+description: 提议新的能力或接口 / Propose a new capability or API
+labels: [enhancement]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 动机 / Motivation
+      description: 想解决什么问题？现在的做法有什么不便？/ What problem does it solve? What is inconvenient today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 方案设想 / Proposal
+      description: 期望的接口或行为（可附示例代码）/ Desired API or behavior (example code welcome)
+      render: cpp
+    validations:
+      required: true

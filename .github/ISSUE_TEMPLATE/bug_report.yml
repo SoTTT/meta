@@ -1,0 +1,35 @@
+name: Bug 报告 / Bug Report
+description: 报告一个可复现的问题 / Report a reproducible problem
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述 / Description
+      description: 发生了什么？期望的行为是什么？/ What happened? What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 最小复现 / Minimal reproduction
+      description: 可编译运行的最小代码片段或测试用例 / A minimal compilable snippet or test case
+      render: cpp
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境 / Environment
+      description: |
+        编译器与版本、操作系统、oatpp 版本、OATPP_MODULES_LOCATION 取值
+        Compiler & version, OS, oatpp version, OATPP_MODULES_LOCATION value
+      placeholder: "例如 / e.g.: Apple Clang 15, macOS 15, oatpp 1.3.0, EXTERNAL"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 错误输出 / Error output
+      description: 编译器错误或运行时异常的关键输出 / Relevant compiler errors or runtime output
+      render: text
